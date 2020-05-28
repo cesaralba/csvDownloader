@@ -1,0 +1,10 @@
+DATADIR=WhereDataWillBeStored/data
+WRKDIR=WhereDataWillBeStored/new
+NEWFILE=${WRKDIR}/newData.csv
+DATAFILE=${DATADIR}/data.csv
+
+#La URL debe ser un único fichero DE TEXTO
+URLFILE="http://WhereIGetDataFrom"
+
+#REMOTEGITURL=NoSeUsaDeMomento
+

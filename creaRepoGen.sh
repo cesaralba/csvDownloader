@@ -26,6 +26,23 @@ GITDIR="${DATADIR}/.git"
 
 [ -d ${GITDIR} ] || git init ${DATADIR} || adiosMundoCruel "Problemas creando repo en ${DATADIR}. Bye"
 
+cat <<FIN
 
+Repo creado. La vinculación con un repo externo queda fuera del alcance de este script
+
+
+No obstante, el procedimiento es:
+
+* Crear el repo remoto (vacío, sin readmes ni mierdas) en un servicio de repositorios (github.com o similar)
+* Elegir la URL para usar (SSH o HTTPS) para enviar cosas que llamaremos URLGITHUB
+* Ir a ${DATADIR}
+
+  git remote add origin URLGITHUB
+
+
+Tenga en cuenta que el programa de descarga está pensado para no ser interactivo. Eso también tendrá que 
+arreglarlo.
+
+FIN
 
 
