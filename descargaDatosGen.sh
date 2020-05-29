@@ -40,6 +40,7 @@ then
   RES=$?
   if [ ${RES} != 0 ]
   then
+    echo "Descarga: ${DATE}"
     diff ${NEWFILE} ${DATAFILE}
     cp ${NEWFILE} ${DATAFILE} || adiosMundoCruel "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
     (cd $DATADIR ; git add ${DATAFILE} || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
