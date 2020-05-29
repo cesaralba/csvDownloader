@@ -28,6 +28,8 @@ source ${ENVFILE}
 
 DOCOMMIT=0
 
+MSG="Fecha:${DATE} fuente ${URLFILE}"
+
 [ -d ${WRKDIR} ] || mkdir -p ${WRKDIR} || adiosMundoCruel "Problemas creando ${WRKDIR}. Bye"
 
 [ -f ${NEWFILE} ] || rm -f ${NEWFILE} || adiosMundoCruel "Problemas borrando ${NEWFILE}. Bye"
@@ -40,7 +42,7 @@ then
   RES=$?
   if [ ${RES} != 0 ]
   then
-    echo "Descarga: ${DATE}"
+    echo "Descarga: ${MSG}"
     diff ${NEWFILE} ${DATAFILE}
     cp ${NEWFILE} ${DATAFILE} || adiosMundoCruel "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
     (cd $DATADIR ; git add ${DATAFILE} || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
@@ -54,7 +56,6 @@ fi
 
 if [ ${DOCOMMIT} != 0 ]
 then
-  MSG="Fecha:${DATE} fuente ${URLFILE}"
   (cd $DATADIR ; git commit -q ${DATAFILE} -m "${MSG}" || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
 
   (cd $DATADIR ; git remote  | grep -q origin)
