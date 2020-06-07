@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from git import Repo
 
@@ -126,3 +127,48 @@ def filtraColumnasDF(df, colDict=None):
                 str(colDict), dfColumns.to_list()))
 
     return df[colsOk]
+
+
+def ponMedidaPrefijo(col, sigColNanV=None, defaultNan=False):
+    colName = col.name
+
+    sigNan = defaultNan if sigColNanV is None else sigColNanV[colName]
+
+    primNonNan = col.reset_index(drop=True).first_valid_index()
+    primVal = col.iloc[primNonNan] if (primNonNan == 0 and not sigNan) else 0
+    result = col.shift(1)
+    result.iloc[primNonNan] = primVal
+
+    return result
+
+
+def cambiosDelDiaGrupo(df):
+    sigColNan = df.head(1).isna().shift(-1, axis=1, fill_value=True).iloc[0]
+
+    dfRef = df.apply(ponMedidaPrefijo, sigColNanV=sigColNan)
+
+    return df - dfRef
+
+
+def cambiosDelDia(df):
+    grupos = df.columns.to_frame().reset_index(drop=True)[
+        ['nombre_ambito', 'nombre_sexo', 'nombre_gedad']].drop_duplicates().T.to_dict().values()
+
+    auxResult = []
+    for filtro in grupos:
+        dfReduc = filtraColumnasDF(df, colDict=filtro)
+        difGrupo = cambiosDelDiaGrupo(dfReduc)
+
+        auxResult.append(difGrupo)
+
+    return pd.concat(auxResult, axis=1)
+
+
+def reordenaColumnas(df, dfRef):
+    return df[dfRef.columns]
+
+
+def operaRespetandoNA(df, func):
+    result = df.applymap(func=lambda x: np.nan if np.isnan(x) else func(x))
+
+    return result
