@@ -75,7 +75,7 @@ def iterateOverGitRepo(REPOLOC, fname, readFunction=leeDatosMomo, **kwargs):
     return result
 
 
-def filtraColumnasDF(df, colDict=None):
+def filtraColumnasDF(df, colDict=None, conv2ts=False):
     """
     Devuelve las columnas de un dataframe que cumplen determinadas condiciones
 
@@ -83,6 +83,10 @@ def filtraColumnasDF(df, colDict=None):
     :param colDict: diccionario con condiciones a cumplir. Las cumple todas y la condición es igualdad
         dada una columna cuyos índices son col={ kc:vc } para cada {k:v} se deben cumplir todas las condiciones
         col[k] == v. k puede ser la posición en la tupla o el nombre en el índice si están definidos.
+    :param conv2ts: trata de convertir el DF resultante a una serie temporal (si se puede). El
+       requisito es que el campo fecha de las columnas no se repita. Si se puede, se pierde el resto
+       de los campos de las columnas (ámbito, ccaa, edad, sexo)
+
     :return: Dataframe con las columnas que cumplen las condiciones
 
         Ejemplo:
@@ -126,7 +130,17 @@ def filtraColumnasDF(df, colDict=None):
             "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
                 str(colDict), dfColumns.to_list()))
 
-    return df[colsOk]
+    result = df[colsOk]
+    if not conv2ts:  # Don't want conversion, nothing else to do
+        return result
+
+    fechasOk = [c[0] for c in colsOk]
+    if len(set(fechasOk)) == len(colsOk):
+        tsCols = pd.DatetimeIndex(fechasOk)
+        result.columns = tsCols
+        return result
+
+    return result
 
 
 def ponMedidaPrefijo(col, sigColNanV=None, defaultNan=False):
@@ -151,6 +165,11 @@ def cambiosDelDiaGrupo(df):
 
 
 def cambiosDelDia(df):
+    """
+    Calcula la diferencia con la entrada del día anterior
+    :param df:
+    :return:
+    """
     grupos = df.columns.to_frame().reset_index(drop=True)[
         ['nombre_ambito', 'nombre_sexo', 'nombre_gedad']].drop_duplicates().T.to_dict().values()
 
@@ -165,10 +184,32 @@ def cambiosDelDia(df):
 
 
 def reordenaColumnas(df, dfRef):
+    """
+    Devuelve un DF con las columnas ordenadas según las columnas de otro.
+
+    :param df:
+    :param dfRef:
+    :return:
+    """
     return df[dfRef.columns]
 
 
 def operaRespetandoNA(df, func):
+    """
+    Aplica una función a cada elemento de un dataframe si NO es na. Si lo es pone el resultado será NA
+
+    :param df: dataframe a tratar
+    :param func: función a aplicar en los elementos que no son NA
+    :return:
+    """
     result = df.applymap(func=lambda x: np.nan if np.isnan(x) else func(x))
 
     return result
+
+
+def primValorColumna(df):
+    return df.apply(lambda x: x[x.first_valid_index()])
+
+
+def ultValorColumna(df):
+    return df.apply(lambda x: x[x.last_valid_index()])
