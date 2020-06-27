@@ -51,7 +51,8 @@ then
     echo "Descarga: ${MSG}"
     #diff ${NEWFILE} ${DATAFILE}
     cp ${NEWFILE} ${DATAFILE} || adiosMundoCruel "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
-    git diff --shortstat
+    
+    (cd $DATADIR ; git diff --shortstat )
     (cd $DATADIR ; git add ${DATAFILE} || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
     DOCOMMIT=1
   fi
