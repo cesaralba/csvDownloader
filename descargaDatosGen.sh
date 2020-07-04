@@ -9,16 +9,14 @@ function adiosMundoCruel {
 }
 
 
-if [ "x$1" = "x" ]
+if [ "x$1" != "x" ]
 then
-  adiosMundoCruel "No se ha especificado parametro con variables de entorno"
-else
-  ENVFILE=$1
+    ENVFILE=$1
+    [ -f "${ENVFILE}" ] || adiosMundoCruel "Fichero con entorno '${ENVFILE}' no existe"
+
+    source ${ENVFILE}
 fi
 
-[ -f "${ENVFILE}" ] || adiosMundoCruel "Fichero con entorno '${ENVFILE}' no existe"
-
-source ${ENVFILE}
 
 [ -n "${DATADIR}" ] || adiosMundoCruel "No se ha especificado la variable DATADIR"
 [ -n "${WRKDIR}" ] || adiosMundoCruel "No se ha especificado la variable WRKDIR"
