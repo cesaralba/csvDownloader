@@ -25,6 +25,7 @@ fi
 [ -n "${URLFILE}" ] || [ -n "${SRCFILE}" ] || adiosMundoCruel "Se necesita especificar o la variable URLFILE o la variable SRCFILE"
 
 BRANCHDEF=${REMOTEBRANCH:-master}
+NAMEDEF=${REMOTENAME:-origin}
 
 DOCOMMIT=0
 
@@ -66,11 +67,11 @@ if [ ${DOCOMMIT} != 0 ]
 then
   (cd $DATADIR ; git commit -q ${DATAFILE} -m "${MSG}" || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
 
-  (cd $DATADIR ; git remote  | grep -q origin)
+  (cd $DATADIR ; git remote  | grep -q ${NAMEDEF})
   RES=$?
   if [ $RES = 0 ]
   then
-    (cd $DATADIR ; git push -v origin ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
+    (cd $DATADIR ; git push -v ${NAMEDEF} ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto ${NAMEDEF}-> ($(git remote -v | grep ${NAMEDEF} ). Bye")
   fi
 fi
 
