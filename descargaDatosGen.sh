@@ -24,6 +24,8 @@ fi
 [ -n "${DATAFILE}" ] || adiosMundoCruel "No se ha especificado la variable DATAFILE"
 [ -n "${URLFILE}" ] || [ -n "${SRCFILE}" ] || adiosMundoCruel "Se necesita especificar o la variable URLFILE o la variable SRCFILE"
 
+BRANCHDEF=${REMOTEBRANCH:-master}
+
 DOCOMMIT=0
 
 
@@ -70,7 +72,7 @@ then
   RES=$?
   if [ $RES = 0 ]
   then
-    (cd $DATADIR ; git remote -v ; git push -q origin master || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
+    (cd $DATADIR ; git push -q origin ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
   fi
 fi
 
