@@ -70,7 +70,7 @@ then
   RES=$?
   if [ $RES = 0 ]
   then
-    (cd $DATADIR ; git push origin ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
+    (cd $DATADIR ; git push -v origin ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
   fi
 fi
 
