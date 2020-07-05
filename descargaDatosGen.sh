@@ -66,13 +66,11 @@ if [ ${DOCOMMIT} != 0 ]
 then
   (cd $DATADIR ; git commit -q ${DATAFILE} -m "${MSG}" || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
 
-  (cd $DATADIR ; git remote  | grep origin)
-  (cd $DATADIR ; git branch -a)
   (cd $DATADIR ; git remote  | grep -q origin)
   RES=$?
   if [ $RES = 0 ]
   then
-    (cd $DATADIR ; git push -q origin ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
+    (cd $DATADIR ; git push origin ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
   fi
 fi
 
