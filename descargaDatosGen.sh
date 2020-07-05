@@ -64,6 +64,7 @@ if [ ${DOCOMMIT} != 0 ]
 then
   (cd $DATADIR ; git commit -q ${DATAFILE} -m "${MSG}" || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
 
+  (cd $DATADIR ; git remote  | grep origin)
   (cd $DATADIR ; git remote  | grep -q origin)
   RES=$?
   if [ $RES = 0 ]
