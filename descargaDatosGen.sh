@@ -66,7 +66,7 @@ fi
 if [ ${DOCOMMIT} != 0 ]
 then
   (cd $DATADIR ; git commit -q ${DATAFILE} -m "${MSG}" || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
-
+  (cd $DATADIR ; git log --oneline --shortstat )
   (cd $DATADIR ; git remote  | grep -q ${NAMEDEF})
   RES=$?
   if [ $RES = 0 ]
