@@ -70,7 +70,7 @@ then
   RES=$?
   if [ $RES = 0 ]
   then
-    (cd $DATADIR ; git remote -v ; git push -q origin || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
+    (cd $DATADIR ; git remote -v ; git push -q origin master || adiosMundoCruel "No puedo hacer push a remoto $(git remote -v | grep origin ). Bye")
   fi
 fi
 
