@@ -127,8 +127,8 @@ def filtraColumnasDF(df, colDict=None, conv2ts=False):
 
     if not colsOk:
         raise KeyError(
-            "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
-                str(colDict), dfColumns.to_list()))
+                "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
+                        str(colDict), dfColumns.to_list()))
 
     result = df[colsOk]
     if not conv2ts:  # Don't want conversion, nothing else to do
@@ -138,6 +138,74 @@ def filtraColumnasDF(df, colDict=None, conv2ts=False):
     if len(set(fechasOk)) == len(colsOk):
         tsCols = pd.DatetimeIndex(fechasOk)
         result.columns = tsCols
+        return result
+
+    return result
+
+
+def filtraFilasSerie(serie, indDict=None, conv2ts=False):
+    """
+    Devuelve las filas de un serie que cumplen determinadas condiciones
+
+    :param serie: Serie
+    :param indDict: diccionario con condiciones a cumplir. Las cumple todas y la condición es igualdad
+        dada una columna cuyos índices son col={ kc:vc } para cada {k:v} se deben cumplir todas las condiciones
+        col[k] == v. k puede ser la posición en la tupla o el nombre en el índice si están definidos.
+    :param conv2ts: trata de convertir el DF resultante a una serie temporal (si se puede). El
+       requisito es que el campo fecha de las columnas no se repita. Si se puede, se pierde el resto
+       de los campos de las columnas (ámbito, ccaa, edad, sexo)
+
+    :return: Serie con las fila que cumplen las condiciones
+
+        Ejemplo:
+         serie.index = MultiIndex([('2018-05-10',     'ccaa', 'Andalucía', 'hombres', 'edad 65-74'),
+            ...
+            ('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')],
+           names=['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad'], length=181920)
+
+        filtraFilasSerie(serie, { 1:'nacional': 'nombre_sexo': 'mujeres' }) devuelve
+
+        serie[[('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')]]
+
+    """
+
+    if not indDict:
+        return serie
+
+    serieIndex = serie.index
+
+    esMultiInd = all([isinstance(c, tuple) for c in serieIndex.to_list()])
+
+    numClaves = max([len(c) for c in serieIndex.to_list()]) if esMultiInd else 1
+    nomClaves = list(serieIndex.names)
+    clave2i = dict(zip(nomClaves, range(numClaves)))
+
+    checkConds = [k < numClaves if isinstance(k, (int)) else (k in nomClaves) for k in indDict.keys()]
+
+    if not all(checkConds):
+        failedConds = [cond for cond, check in zip(indDict.items(), checkConds) if not check]
+        print(failedConds)
+        condsMsg = ",".join(map(lambda x: '"' + str(x) + '"', failedConds))
+        raise ValueError("filtraFilasSerie: condiciones incorrectas: %s" % condsMsg)
+
+    funcCheckMulti = lambda x: all([x[k if isinstance(k, int) else clave2i[k]] == v for k, v in indDict.items()])
+    funcCheckSingle = lambda x: (x == list(indDict.values())[0])
+
+    filassOk = [c for c in serieIndex.to_list() if (funcCheckMulti if esMultiInd else funcCheckSingle)(c)]
+
+    if not filassOk:
+        raise KeyError(
+                "filtraFilasSerie: ninguna fila cumple las condiciones (%s). Filas: %s " % (
+                        str(indDict), serieIndex.to_list()))
+
+    result = serie[filassOk]
+    if not conv2ts:  # Don't want conversion, nothing else to do
+        return result
+
+    fechasOk = [c[0] for c in filassOk]
+    if len(set(fechasOk)) == len(filassOk):
+        tsFilas = pd.DatetimeIndex(fechasOk)
+        result.index = tsFilas
         return result
 
     return result
