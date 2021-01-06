@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from git import Repo
+from sklearn.preprocessing import StandardScaler,MaxAbsScaler,MinMaxScaler,RobustScaler
 
 COLIDX = ['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad']
 
@@ -41,7 +42,7 @@ def iterateOverGitRepo(REPOLOC, fname, readFunction=leeDatosMomo, **kwargs):
     que lee con la función readFunction para devolver un dataFrameTemporal con la versión de cada commit en cada
     fila indexada por la fecha del commit
 
-    :param REPOLOC: lugar donde está descargado el 
+    :param REPOLOC: lugar donde está descargado el repositorio
     :param fname: nombre del fichero a leer. Debe ser relativo a la raíz del repositorio
     :param readFunction: función que lee el fichero fname y devuelve un dataframe de una sóla fila.
     :param readFunction: parámetros adicionales, con nombre, que se pasan a readFunction
@@ -98,7 +99,7 @@ def filtraColumnasDF(df, colDict=None, conv2ts=False):
         filtraColumnasDF(df, { 1:'nacional': 'nombre_sexo': 'mujeres' }) devuelve
 
         df[[('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')]]
-                                            
+
     """
 
     if not colDict:
@@ -281,3 +282,12 @@ def primValorColumna(df):
 
 def ultValorColumna(df):
     return df.apply(lambda x: x[x.last_valid_index()])
+
+def applyScaler(dfTS,year=2019,scalerCls=StandardScaler):
+    scaler = scalerCls()
+    valTrain=dfTS.loc[dfTS.index.year==year]
+    scaler.fit(valTrain)
+
+    result = pd.DataFrame(scaler.transform(dfTS),columns=dfTS.columns, index=dfTS.index)
+
+    return result

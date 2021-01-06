@@ -5,6 +5,7 @@ python-dateutil
 pytz
 scikit-learn
 scipy
+gitpython
 #xlrd
 #openpyxl
 #lxml
