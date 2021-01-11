@@ -22,6 +22,7 @@ class GitIterator(object):
         self.currCommit = 0
 
         self.commitList = [commitID for commitID in self.repo.iter_commits() if self.matchDate(commitID)]
+
         if reverse:
             self.commitList.reverse()
 
@@ -49,7 +50,7 @@ class GitIterator(object):
         if self.minDate is None:
             return True
         else:
-            return self.minDate >= commit.committed_datetime
+            return self.minDate < commit.committed_datetime
 
 
 def fileFromCommit(fPath, commit):
