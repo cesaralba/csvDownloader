@@ -1,12 +1,22 @@
 import numpy as np
 import pandas as pd
 from git import Repo
-from sklearn.preprocessing import StandardScaler,MaxAbsScaler,MinMaxScaler,RobustScaler
+from sklearn.preprocessing import StandardScaler
+
+from .miscDataFrames import leeCSVdataset, indexFillNAs
+
+DEFAULTCOMMIT = [0]
 
 COLIDX = ['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad']
+COLS2DROP = ['cod_ambito', 'cod_ine_ambito', 'cod_sexo', 'cod_gedad']
+INDEXNAREPLACER = {'nombre_ambito': 'España'}
+
+ESTADSCAMBIO = {'contCambObs': ['defunciones_observadas'],
+                'contCambEstads': ['defunciones_observadas_lim_inf', 'defunciones_observadas_lim_sup',
+                                   'defunciones_esperadas', 'defunciones_esperadas_q01', 'defunciones_esperadas_q99']}
 
 
-def leeDatosMomo(fname, columna='defunciones_observadas'):
+def leeDatosMomoFila(fname, columna='defunciones_observadas'):
     """
     Lee un fichero diario de Momo
     ( https://momo.isciii.es/public/momo/data, https://momo.isciii.es/public/momo/dashboard/momo_dashboard.html#datos )
@@ -36,7 +46,19 @@ def leeDatosMomo(fname, columna='defunciones_observadas'):
     return myDF.T.reset_index(drop=True).astype('int64')
 
 
-def iterateOverGitRepo(REPOLOC, fname, readFunction=leeDatosMomo, **kwargs):
+def leeDatosMomoDF(fname_or_handle, **kwargs):
+    """
+    """
+    # COLLIST = COLIDX + [columna]
+
+    myDF = leeCSVdataset(fname_or_handle, colIndex=COLIDX, cols2drop=COLS2DROP, parse_dates=['fecha_defuncion'],
+                         infer_datetime_format=True)
+    myDF.index = indexFillNAs(myDF.index, replacementValues=INDEXNAREPLACER)
+
+    return myDF
+
+
+def iterateOverGitRepo(REPOLOC, fname, readFunction=leeDatosMomoFila, **kwargs):
     """
     A partir de un repositorio GIT descargado en REPOLOC, atraviesa todos los commit buscando el archivo fname
     que lee con la función readFunction para devolver un dataFrameTemporal con la versión de cada commit en cada
@@ -128,8 +150,8 @@ def filtraColumnasDF(df, colDict=None, conv2ts=False):
 
     if not colsOk:
         raise KeyError(
-                "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
-                        str(colDict), dfColumns.to_list()))
+            "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
+                str(colDict), dfColumns.to_list()))
 
     result = df[colsOk]
     if not conv2ts:  # Don't want conversion, nothing else to do
@@ -196,8 +218,8 @@ def filtraFilasSerie(serie, indDict=None, conv2ts=False):
 
     if not filassOk:
         raise KeyError(
-                "filtraFilasSerie: ninguna fila cumple las condiciones (%s). Filas: %s " % (
-                        str(indDict), serieIndex.to_list()))
+            "filtraFilasSerie: ninguna fila cumple las condiciones (%s). Filas: %s " % (
+                str(indDict), serieIndex.to_list()))
 
     result = serie[filassOk]
     if not conv2ts:  # Don't want conversion, nothing else to do
@@ -283,11 +305,12 @@ def primValorColumna(df):
 def ultValorColumna(df):
     return df.apply(lambda x: x[x.last_valid_index()])
 
-def applyScaler(dfTS,year=2019,scalerCls=StandardScaler):
+
+def applyScaler(dfTS, year=2019, scalerCls=StandardScaler):
     scaler = scalerCls()
-    valTrain=dfTS.loc[dfTS.index.year==year]
+    valTrain = dfTS.loc[dfTS.index.year == year]
     scaler.fit(valTrain)
 
-    result = pd.DataFrame(scaler.transform(dfTS),columns=dfTS.columns, index=dfTS.index)
+    result = pd.DataFrame(scaler.transform(dfTS), columns=dfTS.columns, index=dfTS.index)
 
     return result
