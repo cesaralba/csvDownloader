@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 from time import time
 
@@ -72,6 +73,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Columnas adicionales (metadata del último cambio referido al repo que lo contiene)
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
+    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}: commitDate: {commitDate} changed: {changed:6} added: {added:6}{contParciales}"
     fechaUltimaActualizacion = None
     if minDate:
         fechaUltimaActualizacion = minDate
@@ -84,6 +86,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         timeStart = time()
         commitSHA = commit.hexsha
         commitDate = commit.committed_datetime
+        estadCambios = defaultdict(int)
 
         newDF = readFunction(fileFromCommit(filePath, commit), **kwargs)
 
@@ -107,8 +110,8 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             if DFcurrent is None:
                 DFcurrent = newData
                 timeStop = time()
-                print(
-                    f"DFVersionado2DFmerged: {timeStop - timeStart}: commitDate: {commitDate} changed: {len(changed)} added: {len(added)}")
+                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed),
+                                        contParciales="", added=len(added)))
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
         if len(changed):
@@ -123,6 +126,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
                     areRowsDifferent = (DFcurrent.loc[changed, counterCols] != newDF.loc[changed, counterCols]).any(
                         axis=1)
                     DFcurrent.loc[changed, counterName] += areRowsDifferent
+                    estadCambios[counterName] += areRowsDifferent.sum()
 
             DFcurrent.loc[changed, newDF.columns] = newDF.loc[changed, :]
             DFcurrent.loc[changed, 'shaCommit'] = commitSHA
@@ -133,8 +137,12 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
         timeStop = time()
+        strContParciales = ""
+        if changeCounters:
+            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:6}" for name in changeCounters]) + "]"
         print(
-            f"DFVersionado2DFmerged: {timeStop - timeStart}: commitDate: {commitDate} changed: {len(changed)} added: {len(added)}")
+            formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed), added=len(added),
+                              contParciales=strContParciales))
 
     return DFcurrent
 
