@@ -34,5 +34,5 @@ git clone -q --branch master ${GTS_REPO} ${GTS_CODEDIR}
 
 for ENTORNO in $(grep -v '^#' ${ENVIRONMENTLIST})
 do
-  ${GTS_CODEDIR}/descargaDatosGen.sh ${ENTORNO}
+  ${GTS_CODEDIR}/bin/descargaDatosGen.sh ${ENTORNO}
 done
