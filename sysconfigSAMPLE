@@ -1,0 +1,6 @@
+#Editar este fichero y dejarlo  en /etc/sysconfig/GitTimeSeries
+
+export GTS_REPO="https://github.com/cesaralba/csvDownloader"
+export GTS_CODEDIR=DONDEHAREELGITCLONE
+export GTS_VENV=DONDECREAREELVENVPARAELANALISIS
+
