@@ -106,7 +106,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Columnas adicionales (metadata del último cambio referido al repo que lo contiene)
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
-    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}: commitDate: {commitDate} changed: {changed:6} added: {added:6}{contParciales}"
+    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6}{contParciales}"
     fechaUltimaActualizacion = None
     if minDate:
         fechaUltimaActualizacion = minDate

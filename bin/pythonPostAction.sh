@@ -58,5 +58,8 @@ then
   adiosMundoCruel "Fallo en la ejecución de '${GTS_SCRIPTFILE}'"
 fi
 
-[ -f ${GTS_INFILE} ] && cp ${GTS_INFILE} ${GTS_INFILE}.prev || adiosMundoCruel "Problemas copiando ${GTS_INFILE}"
-[ -f ${GTS_OUTFILE} ] && cp ${GTS_OUTFILE} ${GTS_INFILE} || adiosMundoCruel "Problemas copiando ${GTS_OUTFILE}"
+if [ -f ${GTS_INFILE} ]
+then
+  cp ${GTS_INFILE} ${GTS_INFILE}.prev || adiosMundoCruel "Problemas copiando copia de cache ${GTS_INFILE}"
+fi
+[ -f ${GTS_OUTFILE} ] && cp ${GTS_OUTFILE} ${GTS_INFILE} || adiosMundoCruel "Problemas actualizando cache con ${GTS_OUTFILE}"
