@@ -52,7 +52,7 @@ then
     echo "Descarga: ${MSG}"
     #diff ${NEWFILE} ${DATAFILE}
     cp ${NEWFILE} ${DATAFILE} || adiosMundoCruel "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
-    
+
     (cd $DATADIR ; git diff --shortstat )
     (cd $DATADIR ; git add ${DATAFILE} || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
     DOCOMMIT=1
@@ -63,6 +63,7 @@ else
   DOCOMMIT=1
 fi
 
+PREVCOMMIT=$(cd $DATADIR ; git rev-parse HEAD )
 if [ ${DOCOMMIT} != 0 ]
 then
   (cd $DATADIR ; git commit -q ${DATAFILE} -m "${MSG}" || adiosMundoCruel "No puedo añadir ${DATAFILE} a repo. Bye")
@@ -74,7 +75,14 @@ then
     (cd $DATADIR ; git push -q ${NAMEDEF} ${BRANCHDEF} || adiosMundoCruel "No puedo hacer push a remoto ${NAMEDEF}-> ($(git remote -v | grep ${NAMEDEF} ). Bye")
   fi
 fi
+CURRCOMMIT=$(cd $DATADIR ; git rev-parse HEAD )
 
-
-
-
+if [ "${PREVCOMMIT}" != "${CURRCOMMIT}" ]
+then
+  if [ "x${FOLLOWUPSCRIPT}" != "x" ]
+  then
+    [ -e ${FOLLOWUPSCRIPT} ] || adiosMundoCruel "Script de continuación ${FOLLOWUPSCRIPT} no existe"
+    [ -x ${FOLLOWUPSCRIPT} ] || adiosMundoCruel "Script de continuación ${FOLLOWUPSCRIPT} no ejecutable"
+    ${FOLLOWUPSCRIPT} ${ENVFILE}
+  fi
+fi
