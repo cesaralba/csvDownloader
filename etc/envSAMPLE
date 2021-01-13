@@ -8,3 +8,5 @@ URLFILE="http://WhereIGetDataFrom"
 
 #REMOTEGITURL=NoSeUsaDeMomento
 
+#FOLLOWUPSCRIPT="ScriptThatWillRunAfterCommit"
+#GTS_SCRIPTFILE="PythonScriptThatWouldBeUsedIfFOLLOWUPSCRIPTis_bin/pythonPostAction.sh"
