@@ -26,6 +26,13 @@ def compareDataFrameIndexes(new: pd.DataFrame, old: pd.DataFrame = None):
 
 
 def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
+    """
+    Dados dos dataframes, compara los valores de uno y otro y devuelve las claves del índice de datos nuevos,
+    cambiados o eliminados. Las columnas que usa para comparar son las del nuevo.
+    :param new: dataframe con datos nuevos
+    :param old: dataframe con datos viejos
+    :return: tupla de claves eliminadas del viejo, que han cambiado, que no aparecen en el viejo
+    """
     removed, shared, added = compareDataFrameIndexes(new, old)
 
     if len(shared):
@@ -39,8 +46,34 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
     return removed, changed, added
 
 
-def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, **kwargs) -> pd.DataFrame:
+def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
+    """
+    Lee un dataframe (en CSV) y le hace un tratamiento mínimo: fija columnas de índice, elmina columnas y convierte en fecha
+    :param fname_or_handle: nombre de fichero o handle para acceder al dataframe
+    :param colIndex: columnas que formarán el índice (nombre o lista)
+    :param cols2drop: columnas que se van a eliminar (lista)
+    :param colDates: columnas que se van a convertir en fechas (nombre de la columna, lista de nombres, diccionario con
+                     pares: nombre:formatoEsperado
+    :param kwargs: parámetros que se le pasan a pd.read_csv
+    :return: dataframe
+    """
     myDF = pd.read_csv(fname_or_handle, **kwargs)
+
+    if colDates:
+        if isinstance(colDates, str):
+            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True}}
+        elif isinstance(colDates, (list, set)):
+            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True} for colName in colDates}
+        elif isinstance(colDates, dict):
+            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat} for colName, colFormat in
+                             colDates.items()}
+        else:
+            raise TypeError(
+                f"leeCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+
+        for colName, args in conversorArgs.items():
+            myDF[colName] = pd.to_datetime(**args)
+
     resultIndex = myDF.set_index(colIndex) if colIndex else myDF
     resultDropped = resultIndex.drop(columns=cols2drop) if cols2drop else resultIndex
 

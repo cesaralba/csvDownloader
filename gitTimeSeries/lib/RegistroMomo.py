@@ -1,3 +1,5 @@
+import csv
+
 import numpy as np
 import pandas as pd
 from git import Repo
@@ -10,10 +12,12 @@ DEFAULTCOMMIT = [0]
 COLIDX = ['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad']
 COLS2DROP = ['cod_ambito', 'cod_ine_ambito', 'cod_sexo', 'cod_gedad']
 INDEXNAREPLACER = {'nombre_ambito': 'España'}
+COLSADDED = ['shaCommit', 'fechaCommit', 'contCambios']
 
 ESTADSCAMBIO = {'contCambObs': ['defunciones_observadas'],
                 'contCambEstads': ['defunciones_observadas_lim_inf', 'defunciones_observadas_lim_sup',
                                    'defunciones_esperadas', 'defunciones_esperadas_q01', 'defunciones_esperadas_q99']}
+DATECOLS = ['fecha_defuncion', 'fechaCommit']
 
 
 def leeDatosMomoFila(fname, columna='defunciones_observadas'):
@@ -52,10 +56,24 @@ def leeDatosMomoDF(fname_or_handle, **kwargs):
     # COLLIST = COLIDX + [columna]
 
     myDF = leeCSVdataset(fname_or_handle, colIndex=COLIDX, cols2drop=COLS2DROP, parse_dates=['fecha_defuncion'],
-                         infer_datetime_format=True)
+                         infer_datetime_format=True, **kwargs)
     myDF.index = indexFillNAs(myDF.index, replacementValues=INDEXNAREPLACER)
 
     return myDF
+
+
+def leeDatosHistoricos(fname):
+    requiredCols = COLSADDED + list(ESTADSCAMBIO.keys()) + sum(ESTADSCAMBIO.values(), start=[])
+
+    result = leeCSVdataset(fname, colIndex=COLIDX, colDates=DATECOLS, sep=';', header=0)
+    missingCols = set(requiredCols).difference(result.columns)
+    if missingCols:
+        raise ValueError(f"Archivo '{fname}': faltan columnas: {sorted(missingCols)}.")
+    return result
+
+
+def grabaDatosHistoricos(df, fname):
+    df.to_csv(fname, sep=';', header=True, index=True, quoting=csv.QUOTE_ALL)
 
 
 def iterateOverGitRepo(REPOLOC, fname, readFunction=leeDatosMomoFila, **kwargs):
