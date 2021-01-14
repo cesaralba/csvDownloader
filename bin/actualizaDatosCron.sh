@@ -2,7 +2,6 @@
 
 ME=$(readlink -e $0)
 MYMD5=$(md5sum $ME | cut -d' ' -f1)
-exit 1
 
 CONFIGFILE=/etc/sysconfig/GitTimeSeries
 
