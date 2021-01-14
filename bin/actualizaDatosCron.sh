@@ -2,7 +2,6 @@
 
 ME=$(readlink -e $0)
 MYMD5=$(md5sum $ME | cut -d' ' -f1)
-exit 1
 
 CONFIGFILE=/etc/sysconfig/GitTimeSeries
 
@@ -35,7 +34,7 @@ git clone -q --branch master ${GTS_REPO} ${GTS_CODEDIR}
 
 NEWMD5=$(md5sum ${GTS_CODEDIR}/bin/actualizaDatosCron.sh | cut -d' ' -f1)
 
-if [ ${MYMD5} != ${NEWMD5}]
+if [ ${MYMD5} != ${NEWMD5} ]
 then
   echo "AVISO: El MD5 de $ME es distinto de lo que acabo de bajar '${GTS_CODEDIR}/bin/actualizaDatosCron.sh'"
 fi
