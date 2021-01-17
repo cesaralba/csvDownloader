@@ -57,9 +57,6 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
     :param kwargs: parámetros que se le pasan a pd.read_csv
     :return: dataframe
     """
-    print("CAP leeCSVdataset", kwargs)
-    print(type(fname_or_handle))
-
     myDF = pd.read_csv(fname_or_handle, **kwargs)
 
     if colDates:
@@ -123,8 +120,6 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         commitSHA = commit.hexsha
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
-
-        print("CAPleeCSVdataset", fileFromCommit(filePath, commit).stream.readlines()[:30])
 
         newDF = readFunction(fileFromCommit(filePath, commit), **kwargs)
 
