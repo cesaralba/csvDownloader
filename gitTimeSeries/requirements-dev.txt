@@ -3,6 +3,5 @@ python-dateutil
 pytz
 scikit-learn
 scipy
-jupyter
 pmdarima
 statsmodels
