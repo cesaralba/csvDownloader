@@ -74,10 +74,10 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
         for colName, args in conversorArgs.items():
             myDF[colName] = pd.to_datetime(**args)
 
-    resultIndex = myDF.set_index(colIndex) if colIndex else myDF
-    resultDropped = resultIndex.drop(columns=cols2drop) if cols2drop else resultIndex
+    resultDropped = myDF.drop(columns=cols2drop) if cols2drop else myDF
+    resultIndex = resultDropped.set_index(colIndex) if colIndex else resultDropped
 
-    result = resultDropped
+    result = resultIndex
 
     return result
 
