@@ -1,9 +1,11 @@
 from collections import defaultdict
 from datetime import datetime
 from time import time
+from types import FunctionType
 
 import pandas as pd
 
+from utils.misc import listize
 from .GitIterator import GitIterator, fileFromCommit
 
 
@@ -131,14 +133,12 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             newData['fechaCommit'] = pd.to_datetime(commitDate)
             newData['contCambios'] = 0
             if changeCounters:
-                for counterName, counterCols in changeCounters.items():
-                    missingCols = set(counterCols).difference(newDF.columns)
-                    if missingCols:
-                        print(
-                            f"DFVersionado2DFmerged: {counterName}: columnas desconocidas: {sorted(missingCols)}. ",
-                            f"Columnas existentes: {sorted(list(newDF.columns))}. Ignorando contador.")
-                        continue
-                    newData[counterName] = 0
+                for counterName, counterConf in changeCounters.items():
+                    if isinstance(counterConf, dict) and counterConf.get('creaColumna', False):
+                        nombreColumna = counterConf.get('nombreColumna', counterName)
+                        newData[nombreColumna] = 0
+                    else:
+                        newData[counterName] = 0
 
             if DFcurrent is None:
                 DFcurrent = newData
@@ -149,17 +149,37 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
 
         if len(changed):
             if changeCounters:
-                for counterName, counterCols in changeCounters.items():
-                    missingCols = set(counterCols).difference(newDF.columns)
-                    if missingCols:
-                        print(
-                            f"DFVersionado2DFmerged: {counterName}: columnas desconocidas: {sorted(missingCols)}. ",
-                            f"Columnas existentes: {sorted(list(newDF.columns))}. Ignorando contador.")
-                        continue
-                    areRowsDifferent = (DFcurrent.loc[changed, counterCols] != newDF.loc[changed, counterCols]).any(
-                        axis=1)
-                    DFcurrent.loc[changed, counterName] += areRowsDifferent
-                    estadCambios[counterName] += areRowsDifferent.sum()
+                dfCambiadoOld = DFcurrent.loc[changed]
+                dfCambiadoNew = newDF.loc[changed]
+                for counterName, counterConf in changeCounters.items():
+                    # Valores por defecto
+                    funcionCuenta = cuentaFilasCambiadas
+                    restoArgs = {'columnasObj': None, 'fechaReferencia':commitDate}
+
+                    if isinstance(counterConf, list):
+                        restoArgs['columnasObj'] = counterConf
+                    elif isinstance(counterConf, FunctionType):
+                        funcionCuenta = counterConf
+                    elif isinstance(counterConf, dict):
+                        restoArgs.update(counterConf)
+                        funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
+                    elif counterConf is None:
+                        pass
+                    else:
+                        raise ValueError("DFVersionado2DFmerged:changeCounters ")
+
+                    resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfCambiadoOld, dfCambiadoNew,
+                                                                  **restoArgs)
+
+                    if isinstance(resultCuenta, dict):
+                        for k in sorted(resultCuenta):
+                            finalK = f"{counterName}.{k}"
+                            valorK = resultCuenta[k]
+                            estadCambios[finalK] = valorK
+                    else:
+                        estadCambios[counterName] = resultCuenta
+                        if indiceCambiadas is not None:
+                            DFcurrent.loc[changed, counterName] += indiceCambiadas
 
             DFcurrent.loc[changed, newDF.columns] = newDF.loc[changed, :]
             DFcurrent.loc[changed, 'shaCommit'] = commitSHA
@@ -172,7 +192,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         timeStop = time()
         strContParciales = ""
         if changeCounters:
-            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:6}" for name in changeCounters]) + "]"
+            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:6}" for name in estadCambios]) + "]"
         print(
             formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed), added=len(added),
                               contParciales=strContParciales))
@@ -196,3 +216,103 @@ def indexFillNAs(indexdata: pd.MultiIndex, replacementValues: dict):
     result = pd.MultiIndex.from_arrays(newData, names=indexdata.names)
 
     return result
+
+
+def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
+    if len(dfCambiadoOld) != len(dfCambiadoNew):
+        raise ValueError(f"cuentaFilas: longitudes difieren Old:{len(dfCambiadoOld)} != New:{len(dfCambiadoNew)}")
+    if len(dfCambiadoOld) == 0:
+        return 0
+
+    auxColsObj = listize(columnasObj)
+    counterCols = dfCambiadoOld.columns
+    if columnasObj:
+        missingColsNew = set(auxColsObj).difference(dfCambiadoNew.columns)
+
+        if missingColsNew:
+            print(
+                f"columnasCambiadasParaEstadistica: {counterName}: columnas desconocidas: {sorted(missingColsNew)}. ",
+                f"Columnas existentes: {sorted(list(dfCambiadoOld.columns))}. Ignorando contador.")
+            return None
+        counterCols = auxColsObj
+
+    areRowsDifferent = (dfCambiadoOld[counterCols] != dfCambiadoNew[counterCols]).any(axis=1)
+    return areRowsDifferent
+
+
+def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None, **kwargs):
+    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
+                                                        columnasObj=columnasObj)
+
+    return areRowsDifferent.sum(), areRowsDifferent
+
+
+def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, columnasObj=None,
+                            valoresAgrupacion=None, valoresDescribe=None, **kwargs):
+    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
+                                                        columnasObj=columnasObj)
+
+    if areRowsDifferent is None:
+        print("estadisticaCategoricals: {counterName}: problemas tras la invocacion a columnasCambiadasParaEstadistica")
+        return None, None
+
+    columnasIndice = dfCambiadoOld.index.names
+    if columnaIndiceObj not in columnasIndice:
+        print(
+            f"estadisticaCategoricals: {counterName}: columna indice desconocida: {columnaIndiceObj}. ",
+            f"Columnas existentes: {sorted(list(columnasIndice))}. Ignorando contador.")
+        return None
+
+    IDXfilter = False
+    if valoresAgrupacion:
+        IDXfilter = dfCambiadoNew.reset_index()[columnasIndice].isin(valoresAgrupacion).any(axis=1)
+        IDXfilter.index = dfCambiadoNew.index
+
+    filasAContar = ~IDXfilter & areRowsDifferent
+
+    registrosAContar = filasAContar.loc[filasAContar].reset_index()[columnaIndiceObj].astype('category', copy=False)
+
+    resultDesc = registrosAContar.describe()
+    if valoresDescribe:
+        resultDesc = resultDesc[valoresDescribe]
+
+    result = resultDesc.to_dict()
+
+    return result, None
+
+
+def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, fechaReferencia, columnasObj=None,
+                            valoresAgrupacion=None, **kwargs):
+    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
+                                                        columnasObj=columnasObj)
+
+    if areRowsDifferent is None:
+        print("estadisticaFechaCambios: {counterName}: problemas tras la invocacion a columnasCambiadasParaEstadistica")
+        return None, None
+
+    columnasIndice = dfCambiadoOld.index.names
+    if columnaIndiceObj not in columnasIndice:
+        print(
+            f"estadisticaCategoricals: {counterName}: columna indice desconocida: {columnaIndiceObj}. ",
+            f"Columnas existentes: {sorted(list(columnasIndice))}. Ignorando contador.")
+        return None
+
+    IDXfilter = False
+    if valoresAgrupacion:
+        IDXfilter = dfCambiadoNew.reset_index()[columnasIndice].isin(valoresAgrupacion).any(axis=1)
+        IDXfilter.index = dfCambiadoNew.index
+
+    filasAContar = ~IDXfilter & areRowsDifferent
+
+    registrosAContar = filasAContar.loc[filasAContar].reset_index()[columnaIndiceObj]
+
+    descCateg = registrosAContar.astype('category',copy=False).describe().loc[['unique']]
+    descFechas = pd.to_datetime(registrosAContar.describe(datetime_is_numeric=True).loc[['min','max']]).dt.strftime("%Y-%m-%d")
+    descFechas.index = pd.Index(['Fmin','Fmax'])
+    descDiff = ((fechaReferencia.date()-registrosAContar.dt.date).dt.days).describe().loc[['mean','std','50%','min','max']].map('{:,.2f}'.format)
+    descDiff.index = pd.Index(['Dmean','Dstd','Dmedian','Dmin','Dmax',])
+
+    resultDesc = pd.concat([descCateg,descFechas,descDiff])
+    result = resultDesc.to_dict()
+
+    return result, None

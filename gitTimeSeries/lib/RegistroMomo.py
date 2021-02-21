@@ -5,7 +5,7 @@ import pandas as pd
 from git import Repo
 from sklearn.preprocessing import StandardScaler
 
-from .miscDataFrames import leeCSVdataset, indexFillNAs
+from .miscDataFrames import leeCSVdataset, indexFillNAs, estadisticaCategoricals, estadisticaFechaCambios
 
 DEFAULTCOMMIT = [0]
 
@@ -14,9 +14,18 @@ COLS2DROP = ['cod_ambito', 'cod_ine_ambito', 'cod_sexo', 'cod_gedad']
 INDEXNAREPLACER = {'nombre_ambito': 'España'}
 COLSADDED = ['shaCommit', 'fechaCommit', 'contCambios']
 
-ESTADSCAMBIO = {'contCambObs': ['defunciones_observadas'],
-                'contCambEstads': ['defunciones_observadas_lim_inf', 'defunciones_observadas_lim_sup',
-                                   'defunciones_esperadas', 'defunciones_esperadas_q01', 'defunciones_esperadas_q99']}
+VALORESAGRUP = {'nacional', 'todos'}
+
+ESTADSCAMBIO = {'cambObs': ['defunciones_observadas'],
+                'cambEst': ['defunciones_observadas_lim_inf', 'defunciones_observadas_lim_sup',
+                            'defunciones_esperadas', 'defunciones_esperadas_q01', 'defunciones_esperadas_q99'],
+                'ccaaEst': {'columnaIndiceObj': 'nombre_ambito', 'columnasObj': 'defunciones_observadas',
+                            'funcionCuenta': estadisticaCategoricals, 'valoresAgrupacion': VALORESAGRUP,
+                            'valoresDescribe': ['unique', 'top','count']},
+                'fechaEst': {'columnaIndiceObj': 'fecha_defuncion', 'columnasObj': 'defunciones_observadas',
+                             'funcionCuenta': estadisticaFechaCambios, 'valoresAgrupacion': VALORESAGRUP},
+
+                }
 DATECOLS = ['fecha_defuncion', 'fechaCommit']
 
 
