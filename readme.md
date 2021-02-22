@@ -1,4 +1,4 @@
-# Versionado de datasests de series temporales
+# Versionado de datasets de series temporales
 
 El contenido de este repositorio contiene herramientas para la descarga y almacenamiento en un sistema de control de versiones (tipo GIT) de datasets que contienen series temporales. El resultado final es una serie temporal de series temporales.
 
@@ -24,7 +24,7 @@ Tengo la política de _si se va a hacer una cosa 3 veces, se automatiza_ y exper
 Un dataset almacenado así aporta la siguiente información al original:
 
 * Serie temporal más larga. Por tratarse de una base de datos rotatoria, los datos de los primeros días de cada fichero habrán desaparecido en tomas posteriores. Al tener muchas tomas, se puede obtener una serie temporal que exceda los 749 días originales.
-* ¿Cómo evolucionan los datos de correspondientes a una fecha en el tiempo? Aunque existen estadísticas [aquí](https://momo.isciii.es/public/momo/dashboard/momo_dashboard.html#notificacion) se pueden hacer estudios diferentes.
+* Observar cómo evolucionan los datos de correspondientes a una fecha en el tiempo y cómo converge el valor. Aunque existen estadísticas [aquí](https://momo.isciii.es/public/momo/dashboard/momo_dashboard.html#notificacion) se pueden hacer estudios diferentes.
 
 ## Requisitos generales e inconvenientes
 
@@ -80,18 +80,11 @@ El programa de descargas [bin/descargaDatosGen.sh](bin/descargaDatosGen.sh) hace
 * Si el repositorio tiene una ubicación remota, hace el push al SCM remoto.
 * Si hay configurado un programa de postprocesado, lo ejecuta.
 
-Para todo (descarga de ficheros, acceso al SCM remoto, ejecución del script,...)  asume que tiene permisos.
+Para todo (descarga de ficheros, acceso al SCM remoto, ejecución del script...) asume que tiene permisos.
 
+###  Fichero de entorno
 
-
-
-
-
-
-
-###  Descarga de datasets
-
-El elemento clave para que funcione el sistema automático es un fichero con variables de entorno que se usan por los programas.
+Es un fichero en el que se fijan los valores que controlan una descarga. La sintaxis es la de un fichero de variables de entorno de _bash_.
 
 Hay un ejemplo en [etc/envSAMPLE](etc/envSAMPLE) y el contenido es el siguiente.
 
