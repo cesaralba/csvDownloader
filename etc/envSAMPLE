@@ -6,8 +6,6 @@ DATAFILE=${DATADIR}/data.csv
 #La URL debe ser un único fichero DE TEXTO
 URLFILE="http://WhereIGetDataFrom"
 
-#REMOTEGITURL=NoSeUsaDeMomento
-
 # Si se va a usar una acción de postprocesado
 #FOLLOWUPSCRIPT="ScriptThatWillRunAfterCommit"
 #GTS_SCRIPTFILE="PythonScriptThatWouldBeUsedIfFOLLOWUPSCRIPTis_bin/pythonPostAction.sh"

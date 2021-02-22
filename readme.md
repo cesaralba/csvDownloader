@@ -57,6 +57,18 @@ El comportamiento general del lanzador se controla con otro fichero con variable
 
 El programa asume que tiene acceso y permisos para hacer todo lo que necesita.
 
+### Flujo general
+
+* Localizar un dataset susceptible de ser versionado (de texto para poder aprovechar lo que ofrece git para control de versiones, con una variación de datos relativamente baja) y guardar su URL (que se almacenará en la variable _URLFILE_) para descargarlo con wget (petición GET normal).
+* Crear un directorio (que se almacenará en la variable _DATADIR_) en la máquina que va a alojar la serie descargada e inicializarlo como repositorio _git_. Si se desea puede emplearse el programa [bin/creaRepoGen.sh](bin/creaRepoGen.sh).
+* Decidir un nombre para el fichero (que se almacenará, path completo en la variable _DATAFILE_ ). El nombre no tiene por qué se el del fichero descargado.
+* Opcionalmente se puede crear un repositorio en un SCM remoto (_github.com_ por ejemplo) al que se subirá el local. Se deberá configurar en un destino _origin_ y para que la subida se haga sin necesidad de interactividad (sugerencia, clave SSH autorizada y uso de la variable de entorno _GIT_SSH_COMMAND_ para controlar la conexión a GIT)
+* Localizar un directorio para dejar ficheros temporales (cuya ubicación se almacenará en la variable _WRKDIR_) y elegir un nombre de fichero dentro de ese directorio para el fichero que se descargue (cuya ubicación se almacenará, path completo, en la variable _WRKDIR_)  
+* Crear un fichero de entorno que contendrá todas las variables antes mencionadas  
+
+
+
+
 ### Configuración del lanzador
 
 El contenido del fichero en */etc/sysconfig/GitTimeSeries* es
@@ -106,6 +118,24 @@ URLFILE="http://WhereIGetDataFrom"
 #export GTS_INFILE="MiArchivoDeCacheEjecucionAnterior"
 #export GTS_OUTFILE="FicheroResultadoDelPostprocesado"
 ~~~
+
+* *DATADIR* Ubicación del fichero de datos (realmente no pero por comodidad general mejor que lo sea). *DEBE* estar dentro de un repositorio _git_. Si se quieren usar  [bin/creaRepoGen.sh](bin/creaRepoGen.sh) o [bin/pythonPostAction.sh](bin/pythonPostAction.sh), la base del repositorio será el contenido de esta variable.
+* *DATAFILE* Nombre (path completo para simplificar las cosas) del fichero que contiene el dataset. Debe estar dentro de _DATADIR_ (para evitar problemas sin carpetas intermedias).
+* *WRKDIR* Ubicación del fichero temporal. No es demasiado importante el sitio, basta con que tenga espacio y permisos.
+* *NEWFILE* Fichero que se descargará de la fuente y se comparará con el último válido. Este fichero se borrará en cada ejecución de [bin/descargaDatosGen.sh](bin/descargaDatosGen.sh).
+* *URLFILE* URL completa del fichero con el dataset. El programa hace un wget sin autenticación.
+  
+Las siguientes variables son opcionales y sirven para ejecutar un script de postprocesado si se produce una actualización en el dataset. La invocación del script incluye como parámetro este mismo fichero de entorno por lo que las variables de entorno que rijan el comportamiento deberían ir incluidas en este mismo fichero. 
+
+Las variables que siguen a _FOLLOWUPSCRIPT_ son relevantes a [bin/pythonPostAction.sh](bin/pythonPostAction.sh). Scripts diferentes podrían necesitar variables diferentes. El flujo de trabajo de [bin/pythonPostAction.sh](bin/pythonPostAction.sh) se explica más adelante.   
+* *FOLLOWUPSCRIPT* [Opcional] Ubicación del script. Se suministra [bin/pythonPostAction.sh](bin/pythonPostAction.sh) para ejecutar los scripts en Python 
+* *GTS_SCRIPTFILE* Programa python que va a procesar el repositorio _git_
+* *GTS_INFILE* Fichero que es la entrada del script indicado en *GTS_SCRIPTFILE*. Para que el conjunto sea eficiente, debería ser la salida de una ejecución anterior y que el programa sea incremental.   
+* *GTS_OUTFILE* Fichero que es la salida del script indicado en *GTS_SCRIPTFILE*.  
+
+
+
+
 
 Supongamos que tenemos un dataset que se modifica periódicamente y del que queremos observar cómo cambia. Ya tenemos la *URL*. 
 

@@ -43,7 +43,6 @@ if [ -f ${DATAFILE} ]; then
   RES=$?
   if [ ${RES} != 0 ]; then
     echo "Descarga: ${MSG}"
-    #diff ${NEWFILE} ${DATAFILE}
     cp ${NEWFILE} ${DATAFILE} || adiosMundoCruel "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
 
     (
