@@ -5,7 +5,8 @@ import pandas as pd
 from git import Repo
 from sklearn.preprocessing import StandardScaler
 
-from .miscDataFrames import leeCSVdataset, indexFillNAs, estadisticaCategoricals, estadisticaFechaCambios
+from .miscDataFrames import leeCSVdataset, indexFillNAs, estadisticaCategoricals, estadisticaFechaCambios, \
+    changeCounters2colNames
 
 DEFAULTCOMMIT = [0]
 
@@ -21,7 +22,7 @@ ESTADSCAMBIO = {'cambObs': ['defunciones_observadas'],
                             'defunciones_esperadas', 'defunciones_esperadas_q01', 'defunciones_esperadas_q99'],
                 'ccaaEst': {'columnaIndiceObj': 'nombre_ambito', 'columnasObj': 'defunciones_observadas',
                             'funcionCuenta': estadisticaCategoricals, 'valoresAgrupacion': VALORESAGRUP,
-                            'valoresDescribe': ['unique', 'top','count']},
+                            'valoresDescribe': ['unique', 'top', 'count']},
                 'fechaEst': {'columnaIndiceObj': 'fecha_defuncion', 'columnasObj': 'defunciones_observadas',
                              'funcionCuenta': estadisticaFechaCambios, 'valoresAgrupacion': VALORESAGRUP},
 
@@ -72,7 +73,7 @@ def leeDatosMomoDF(fname_or_handle, **kwargs):
 
 
 def leeDatosHistoricos(fname):
-    requiredCols = COLSADDED + list(ESTADSCAMBIO.keys()) + sum(ESTADSCAMBIO.values(), start=[])
+    requiredCols = COLSADDED + changeCounters2colNames(ESTADSCAMBIO)
 
     result = leeCSVdataset(fname, colIndex=COLIDX, colDates=DATECOLS, sep=';', header=0)
     missingCols = set(requiredCols).difference(result.columns)
