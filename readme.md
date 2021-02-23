@@ -62,9 +62,10 @@ El programa asume que tiene acceso y permisos para hacer todo lo que necesita.
 * Localizar un dataset susceptible de ser versionado (de texto para poder aprovechar lo que ofrece git para control de versiones, con una variación de datos relativamente baja) y guardar su URL (que se almacenará en la variable _URLFILE_) para descargarlo con wget (petición GET normal).
 * Crear un directorio (que se almacenará en la variable _DATADIR_) en la máquina que va a alojar la serie descargada e inicializarlo como repositorio _git_. Si se desea puede emplearse el programa [bin/creaRepoGen.sh](bin/creaRepoGen.sh).
 * Decidir un nombre para el fichero (que se almacenará, path completo en la variable _DATAFILE_ ). El nombre no tiene por qué se el del fichero descargado.
-* Opcionalmente se puede crear un repositorio en un SCM remoto (_github.com_ por ejemplo) al que se subirá el local. Se deberá configurar en un destino _origin_ y para que la subida se haga sin necesidad de interactividad (sugerencia, clave SSH autorizada y uso de la variable de entorno _GIT_SSH_COMMAND_ para controlar la conexión a GIT)
+* Opcionalmente se puede crear un repositorio en un SCM remoto (_github.com_ por ejemplo) al que se subirá el local. Se deberá configurar en un destino _origin_ y para que la subida se haga sin necesidad de interactividad (sugerencia, clave SSH autorizada y uso de la variable de entorno _GIT_SSH_ para controlar la conexión a GIT)
 * Localizar un directorio para dejar ficheros temporales (cuya ubicación se almacenará en la variable _WRKDIR_) y elegir un nombre de fichero dentro de ese directorio para el fichero que se descargue (cuya ubicación se almacenará, path completo, en la variable _WRKDIR_)  
-* Crear un fichero de entorno que contendrá todas las variables antes mencionadas  
+* Crear un fichero de entorno que contendrá todas las variables antes mencionadas (más información, [aquí](#fichero-de-entorno))
+* Si es necesario realizar postprocesado en caso de que haya habido cambios, actualización
 
 
 
@@ -75,12 +76,10 @@ El contenido del fichero en */etc/sysconfig/GitTimeSeries* es
 ~~~
 export GTS_REPO="https://github.com/cesaralba/csvDownloader"
 export GTS_CODEDIR=DONDEHAREELGITCLONE
-export GTS_VENV=DONDECREAREELVENVPARAELANALISIS
 ~~~
 
 * *GTS_REPO* es la ubicación del repositorio en _github.com_. Modificar si se hace un fork o se hace desde otro sitio.
 * *GTS_CODEDIR* es el lugar en el disco donde se hará el clonado del repositorio. Este directorio se creará en cada ejecución por lo que no debería ser usado para desarrollo u otros fines.
-* *GTS_VENV* es la ubicación del _virtual environment_ de _python_ que contiene las librerías necesarias para usar los scripts de postprocesado. Este _venv_ lo deberá  crear y actualizar el administrador cuando sea neceario. Se pueden encontrar instrucciones para crear el _venv_ [aquí](https://docs.python.org/3/library/venv.html). El listado de librerías necesarias para ejecutar el programa de postprocesado se puede encontrar en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt). En [](gitTimeSeries/requirements-dev.txt) se encuentran librerías que se pueden usar para un estudio de los datos descargados _offline_.
 
 ### Programa de descargas
 
@@ -96,7 +95,7 @@ Para todo (descarga de ficheros, acceso al SCM remoto, ejecución del script...)
 
 ###  Fichero de entorno
 
-Es un fichero en el que se fijan los valores que controlan una descarga. La sintaxis es la de un fichero de variables de entorno de _bash_.
+Es un fichero en el que se fijan los valores que controlan una descarga. La sintaxis es la de un fichero de variables de entorno de _bash_ y los programas que lo emplean lo cargarán con _source_.
 
 Hay un ejemplo en [etc/envSAMPLE](etc/envSAMPLE) y el contenido es el siguiente.
 
@@ -115,10 +114,11 @@ URLFILE="http://WhereIGetDataFrom"
 #FOLLOWUPSCRIPT="ScriptThatWillRunAfterCommit"
 #GTS_SCRIPTFILE="PythonScriptThatWouldBeUsedIfFOLLOWUPSCRIPTis_bin/pythonPostAction.sh"
 
+#export GTS_VENV=DONDECREAREELVENVPARAELANALISIS
 #export GTS_INFILE="MiArchivoDeCacheEjecucionAnterior"
 #export GTS_OUTFILE="FicheroResultadoDelPostprocesado"
 ~~~
-
+Las variables que es necesario incluir son:
 * *DATADIR* Ubicación del fichero de datos (realmente no pero por comodidad general mejor que lo sea). *DEBE* estar dentro de un repositorio _git_. Si se quieren usar  [bin/creaRepoGen.sh](bin/creaRepoGen.sh) o [bin/pythonPostAction.sh](bin/pythonPostAction.sh), la base del repositorio será el contenido de esta variable.
 * *DATAFILE* Nombre (path completo para simplificar las cosas) del fichero que contiene el dataset. Debe estar dentro de _DATADIR_ (para evitar problemas sin carpetas intermedias).
 * *WRKDIR* Ubicación del fichero temporal. No es demasiado importante el sitio, basta con que tenga espacio y permisos.
@@ -132,6 +132,28 @@ Las variables que siguen a _FOLLOWUPSCRIPT_ son relevantes a [bin/pythonPostActi
 * *GTS_SCRIPTFILE* Programa python que va a procesar el repositorio _git_
 * *GTS_INFILE* Fichero que es la entrada del script indicado en *GTS_SCRIPTFILE*. Para que el conjunto sea eficiente, debería ser la salida de una ejecución anterior y que el programa sea incremental.   
 * *GTS_OUTFILE* Fichero que es la salida del script indicado en *GTS_SCRIPTFILE*.  
+* *GTS_VENV* es la ubicación del _virtual environment_ de _python_ que contiene las librerías necesarias para usar los scripts de postprocesado. Este _venv_ lo deberá  crear y actualizar el administrador cuando sea neceario. Se pueden encontrar instrucciones para crear el _venv_ [aquí](https://docs.python.org/3/library/venv.html). El listado de librerías necesarias para ejecutar el programa de postprocesado se puede encontrar en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt). En [](gitTimeSeries/requirements-dev.txt) se encuentran librerías que se pueden usar para un estudio de los datos descargados _offline_.
+
+### Ejecución de postprocesado
+Como se indica en la sección [anterior](#fichero-de-entorno), es posible configurar el descargador para que ejecute un programa en caso de que haya habido una actualización en los datos. El patrón de ejecución es similar al del programa de descargas: un script/programa al que se le pasa como parámetro el mismo fichero (su ubicación) que se le pasó al programa de descargas.
+
+Se suministra un [script operativo](bin/pythonPostAction.sh) y que puede servir de punto de partida si se quieren hacer alteraciones. El script lanza un programa _python_ que recorre el repositorio para anotar los cambios. 
+
+El flujo de este programa es el siguiente:
+
+* Carga el fichero de variables de entorno que se ha pasado como parámetro.
+* Hace una comprobación de que todas las variables que necesita están definidas y son válidas.
+* Si el virtual environment no está creado (no hay una instancia de _python_ donde debía), lo crea.
+* Repasa la lista de módulos python necesarios (en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt)) y los carga/actualiza.
+* Calcula la ubicación del fichero de datos relativo (sacada de _DATAFILE_ y que trae ruta absoluta) a la raíz del repositorio (sacada de _DATADIR_) que serán parámetros del programa que se ejecute (sacado de _GTS_SCRIPTFILE_).
+* Ejecuta el programa. El programa usa las variables _GTS_INFILE_ y _GTS_OUTFILE_ como datos de entrada y salida, respectivamente.   
+* Si la ejecución es exitosa, pone a salvo el fichero (le añade la extensión _.prev_) que se usó de entrada (si el fichero existía) y copia el fichero de salida para que sea el fichero de entrada de la siguiente ejecución.
+
+
+
+
+
+
 
 
 

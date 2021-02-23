@@ -10,5 +10,6 @@ URLFILE="http://WhereIGetDataFrom"
 #FOLLOWUPSCRIPT="ScriptThatWillRunAfterCommit"
 #GTS_SCRIPTFILE="PythonScriptThatWouldBeUsedIfFOLLOWUPSCRIPTis_bin/pythonPostAction.sh"
 
+#export GTS_VENV=DONDECREAREELVENVPARAELANALISIS
 #export GTS_INFILE="MiArchivoDeCacheEjecucionAnterior"
 #export GTS_OUTFILE="FicheroResultadoDelPostprocesado"
