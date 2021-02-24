@@ -164,8 +164,6 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
                 elif isinstance(counterConf, dict):
                     restoArgs.update(counterConf)
                     funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
-                elif counterConf is None:
-                    pass
                 else:
                     raise ValueError("DFVersionado2DFmerged:changeCounters ")
 
