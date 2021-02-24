@@ -61,9 +61,6 @@ def leeDatosMomoFila(fname, columna='defunciones_observadas'):
 
 
 def leeDatosMomoDF(fname_or_handle, **kwargs):
-    """
-    """
-    # COLLIST = COLIDX + [columna]
 
     myDF = leeCSVdataset(fname_or_handle, colIndex=COLIDX, cols2drop=COLS2DROP, parse_dates=['fecha_defuncion'],
                          infer_datetime_format=True, **kwargs)
