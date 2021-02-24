@@ -110,6 +110,8 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
     """
     formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6}{contParciales}"
     fechaUltimaActualizacion = None
+    changeCounters= {} if changeCounters is None else changeCounters
+
     if minDate:
         fechaUltimaActualizacion = minDate
     elif DFcurrent is not None:  # Hecha la comprobación de is not None porque pandas se queja
@@ -132,13 +134,13 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             newData['shaCommit'] = commitSHA
             newData['fechaCommit'] = pd.to_datetime(commitDate)
             newData['contCambios'] = 0
-            if changeCounters:
-                for counterName, counterConf in changeCounters.items():
-                    if isinstance(counterConf, dict) and counterConf.get('creaColumna', False):
-                        nombreColumna = counterConf.get('nombreColumna', counterName)
-                        newData[nombreColumna] = 0
-                    else:
-                        newData[counterName] = 0
+
+            for counterName, counterConf in changeCounters.items():
+                if isinstance(counterConf, dict) and counterConf.get('creaColumna', False):
+                    nombreColumna = counterConf.get('nombreColumna', counterName)
+                    newData[nombreColumna] = 0
+                else:
+                    newData[counterName] = 0
 
             if DFcurrent is None:
                 DFcurrent = newData
@@ -148,38 +150,37 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
         if len(changed):
-            if changeCounters:
-                dfCambiadoOld = DFcurrent.loc[changed]
-                dfCambiadoNew = newDF.loc[changed]
-                for counterName, counterConf in changeCounters.items():
-                    # Valores por defecto
-                    funcionCuenta = cuentaFilasCambiadas
-                    restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
+            dfCambiadoOld = DFcurrent.loc[changed]
+            dfCambiadoNew = newDF.loc[changed]
+            for counterName, counterConf in changeCounters.items():
+                # Valores por defecto
+                funcionCuenta = cuentaFilasCambiadas
+                restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
 
-                    if isinstance(counterConf, list):
-                        restoArgs['columnasObj'] = counterConf
-                    elif isinstance(counterConf, FunctionType):
-                        funcionCuenta = counterConf
-                    elif isinstance(counterConf, dict):
-                        restoArgs.update(counterConf)
-                        funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
-                    elif counterConf is None:
-                        pass
-                    else:
-                        raise ValueError("DFVersionado2DFmerged:changeCounters ")
+                if isinstance(counterConf, list):
+                    restoArgs['columnasObj'] = counterConf
+                elif isinstance(counterConf, FunctionType):
+                    funcionCuenta = counterConf
+                elif isinstance(counterConf, dict):
+                    restoArgs.update(counterConf)
+                    funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
+                elif counterConf is None:
+                    pass
+                else:
+                    raise ValueError("DFVersionado2DFmerged:changeCounters ")
 
-                    resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfCambiadoOld, dfCambiadoNew,
-                                                                  **restoArgs)
+                resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfCambiadoOld, dfCambiadoNew,
+                                                              **restoArgs)
 
-                    if isinstance(resultCuenta, dict):
-                        for k in sorted(resultCuenta):
-                            finalK = f"{counterName}.{k}"
-                            valorK = resultCuenta[k]
-                            estadCambios[finalK] = valorK
-                    else:
-                        estadCambios[counterName] = resultCuenta
-                        if indiceCambiadas is not None:
-                            DFcurrent.loc[changed, counterName] += indiceCambiadas
+                if isinstance(resultCuenta, dict):
+                    for k in sorted(resultCuenta):
+                        finalK = f"{counterName}.{k}"
+                        valorK = resultCuenta[k]
+                        estadCambios[finalK] = valorK
+                else:
+                    estadCambios[counterName] = resultCuenta
+                    if indiceCambiadas is not None:
+                        DFcurrent.loc[changed, counterName] += indiceCambiadas
 
             DFcurrent.loc[changed, newDF.columns] = newDF.loc[changed, :]
             DFcurrent.loc[changed, 'shaCommit'] = commitSHA
