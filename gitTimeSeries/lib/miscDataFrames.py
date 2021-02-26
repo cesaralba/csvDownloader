@@ -127,11 +127,11 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         newDF = readFunction(fileFromCommit(filePath, commit), **kwargs)
 
         _, changed, added = compareDataFrames(newDF, DFcurrent)
+        newDF['shaCommit'] = commitSHA
+        newDF['fechaCommit'] = pd.to_datetime(commitDate)
 
         if len(added):
             newData = newDF.loc[added, :]
-            newData['shaCommit'] = commitSHA
-            newData['fechaCommit'] = pd.to_datetime(commitDate)
             newData['contCambios'] = 0
 
             newData = changeCounters2newColumns(dfNewlines=newData, changeCounters=changeCounters)
@@ -146,38 +146,14 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         if len(changed):
             dfCambiadoOld = DFcurrent.loc[changed]
             dfCambiadoNew = newDF.loc[changed]
-            for counterName, counterConf in changeCounters.items():
-                # Valores por defecto
-                funcionCuenta = cuentaFilasCambiadas
-                restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
+            dfCambiadoNew['contCambios'] = dfCambiadoOld['contCambios'] + 1
 
-                if isinstance(counterConf, list):
-                    restoArgs['columnasObj'] = counterConf
-                elif isinstance(counterConf, FunctionType):
-                    funcionCuenta = counterConf
-                elif isinstance(counterConf, dict):
-                    restoArgs.update(counterConf)
-                    funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
-                else:
-                    raise ValueError("DFVersionado2DFmerged:changeCounters ")
+            restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
 
-                resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfCambiadoOld, dfCambiadoNew,
-                                                              **restoArgs)
-
-                if isinstance(resultCuenta, dict):
-                    for k in sorted(resultCuenta):
-                        finalK = f"{counterName}.{k}"
-                        valorK = resultCuenta[k]
-                        estadCambios[finalK] = valorK
-                else:
-                    estadCambios[counterName] = resultCuenta
-                    if indiceCambiadas is not None:
-                        DFcurrent.loc[changed, counterName] += indiceCambiadas
-
-            DFcurrent.loc[changed, newDF.columns] = newDF.loc[changed, :]
-            DFcurrent.loc[changed, 'shaCommit'] = commitSHA
-            DFcurrent.loc[changed, 'fechaCommit'] = commitDate
-            DFcurrent.loc[changed, 'contCambios'] += 1
+            newConStats, msgStats = changeCounters2changedDataStats(dfCambiadoOld, dfCambiadoNew, changeCounters,
+                                                                    **restoArgs)
+            DFcurrent.loc[changed] = newConStats
+            estadCambios.update(msgStats)
 
         if len(added):
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
@@ -354,10 +330,46 @@ def changeCounters2newColumns(dfNewlines, changeCounters=None):
     changeCounters = {} if changeCounters is None else changeCounters
 
     for counterName, counterConf in changeCounters.items():
-        if isinstance(counterConf, dict) and counterConf.get('creaColumna', False):
-            nombreColumna = counterConf.get('nombreColumna', counterName)
-            dfNewlines[nombreColumna] = 0
+        if isinstance(counterConf, dict):
+            if counterConf.get('creaColumna', False):
+                nombreColumna = counterConf.get('nombreColumna', counterName)
+                dfNewlines[nombreColumna] = 0
         else:
             dfNewlines[counterName] = 0
 
     return dfNewlines
+
+
+def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs):
+    statMsg = dict()
+    resultDF = dfNew
+
+    changeCounters = {} if changeCounters is None else changeCounters
+
+    for counterName, counterConf in changeCounters.items():
+        # Valores por defecto
+        funcionCuenta = cuentaFilasCambiadas
+
+        if isinstance(counterConf, list):
+            kwargs['columnasObj'] = counterConf
+        elif isinstance(counterConf, FunctionType):
+            funcionCuenta = counterConf
+        elif isinstance(counterConf, dict):
+            kwargs.update(counterConf)
+            funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
+        else:
+            raise ValueError("DFVersionado2DFmerged:changeCounters ")
+
+        resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfOld, dfNew, **kwargs)
+
+        if isinstance(resultCuenta, dict):
+            for k in sorted(resultCuenta):
+                finalK = f"{counterName}.{k}"
+                valorK = resultCuenta[k]
+                statMsg[finalK] = valorK
+        else:
+            statMsg[counterName] = resultCuenta
+            if indiceCambiadas is not None:
+                resultDF[counterName] = dfOld[counterName] + indiceCambiadas
+
+    return resultDF, statMsg
