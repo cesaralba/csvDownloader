@@ -6,7 +6,7 @@ from git import Repo
 from sklearn.preprocessing import StandardScaler
 
 from .miscDataFrames import leeCSVdataset, indexFillNAs, estadisticaCategoricals, estadisticaFechaCambios, \
-    changeCounters2colNames
+    changeCounters2ReqColNames
 
 DEFAULTCOMMIT = [0]
 
@@ -70,7 +70,7 @@ def leeDatosMomoDF(fname_or_handle, **kwargs):
 
 
 def leeDatosHistoricos(fname):
-    requiredCols = COLSADDED + changeCounters2colNames(ESTADSCAMBIO)
+    requiredCols = COLSADDED + changeCounters2ReqColNames(ESTADSCAMBIO)
 
     result = leeCSVdataset(fname, colIndex=COLIDX, colDates=DATECOLS, sep=';', header=0)
     missingCols = set(requiredCols).difference(result.columns)

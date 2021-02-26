@@ -110,7 +110,6 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
     """
     formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6}{contParciales}"
     fechaUltimaActualizacion = None
-    changeCounters= {} if changeCounters is None else changeCounters
 
     if minDate:
         fechaUltimaActualizacion = minDate
@@ -135,12 +134,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             newData['fechaCommit'] = pd.to_datetime(commitDate)
             newData['contCambios'] = 0
 
-            for counterName, counterConf in changeCounters.items():
-                if isinstance(counterConf, dict) and counterConf.get('creaColumna', False):
-                    nombreColumna = counterConf.get('nombreColumna', counterName)
-                    newData[nombreColumna] = 0
-                else:
-                    newData[counterName] = 0
+            newData = changeCounters2newColumns(dfNewlines=newData, changeCounters=changeCounters)
 
             if DFcurrent is None:
                 DFcurrent = newData
@@ -330,7 +324,7 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     return result, None
 
 
-def changeCounters2colNames(changeCounters: dict = None):
+def changeCounters2ReqColNames(changeCounters: dict = None):
     """
     Dado un diccionario con estadistacas de contador de cambios, extrae las columnas que aparecerían en el DF histórico
     (columnas que se buscan + las que se añaden)
@@ -354,3 +348,16 @@ def changeCounters2colNames(changeCounters: dict = None):
             result.extend(counterConf)
 
     return result
+
+
+def changeCounters2newColumns(dfNewlines, changeCounters=None):
+    changeCounters = {} if changeCounters is None else changeCounters
+
+    for counterName, counterConf in changeCounters.items():
+        if isinstance(counterConf, dict) and counterConf.get('creaColumna', False):
+            nombreColumna = counterConf.get('nombreColumna', counterName)
+            dfNewlines[nombreColumna] = 0
+        else:
+            dfNewlines[counterName] = 0
+
+    return dfNewlines
