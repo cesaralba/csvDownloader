@@ -161,7 +161,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         timeStop = time()
         strContParciales = ""
         if changeCounters:
-            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:6}" for name in estadCambios]) + "]"
+            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
         print(
             formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed), added=len(added),
                               contParciales=strContParciales))
