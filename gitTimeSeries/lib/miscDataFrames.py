@@ -357,8 +357,6 @@ def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs)
         elif isinstance(counterConf, dict):
             kwargs.update(counterConf)
             funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
-        else:
-            raise ValueError("DFVersionado2DFmerged:changeCounters ")
 
         resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfOld, dfNew, **kwargs)
 
