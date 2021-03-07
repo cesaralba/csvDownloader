@@ -60,5 +60,3 @@ def fileFromCommit(fPath, commit):
         if blob.path == fPath:
             fileHandle = blob.data_stream
             return fileHandle
-    else:  # File not in commit version of repo
-        return None

@@ -20,8 +20,6 @@ function adiosMundoCruel() {
 
 source ${CONFIGFILE}
 
-[ -f "${CONFIGFILE}" ] || adiosMundoCruel "Fichero con entorno '${CONFIGFILE}' no existe"
-
 [ -n "${GTS_REPO}" ] || adiosMundoCruel "No se ha especificado la variable GTS_REPO"
 [ -n "${GTS_CODEDIR}" ] || adiosMundoCruel "No se ha especificado la variable GTS_CODEDIR"
 
