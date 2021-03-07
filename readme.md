@@ -16,12 +16,12 @@ se puede obtener información para periodos mayores a la rotación original, obs
 El dataset permitía, con sus limitaciones, hacerse una idea de la magnitud de la tragedia (ver cuánta gente estaba muriendo que no estaba previsto que lo hiciese)
 y su evolución (las olas). Con el paso del tiempo la curiosidad se amplió a observar cómo cambiaban los datos e imaginar cuál era la logística asociada al dataset.
 
-Tengo la política de _si se va a hacer una cosa 3 veces, se automatiza_ y experiencia de problemas similares de descarga periódica de datos así que este repositorio era la respuesta esperable. Con el tiempo he ido automatizando las cosas y generalizando para poder tratar datasets diferentes (como los de la
+Tengo la política de _si se va a hacer una cosa 3 veces, se automatiza_ y experiencia de problemas similares de descarga periódica de datos así que el contenido de este repositorio era la respuesta esperable. Con el tiempo he ido automatizando las cosas y generalizando para poder tratar datasets diferentes (como los de la
 [comunidad de Madrid](https://datos.comunidad.madrid/catalogo/dataset/covid19_tia_muni_y_distritos) relativos al COVID).
 
 ### ¿Qué información se puede obtener con un dataset almacenado así?
 
-Un dataset almacenado así aporta la siguiente información al original:
+Un dataset almacenado así añade la siguiente información al original:
 
 * Serie temporal más larga. Por tratarse de una base de datos rotatoria, los datos de los primeros días de cada fichero habrán desaparecido en tomas posteriores. Al tener muchas tomas, se puede obtener una serie temporal que exceda los 749 días originales.
 * Observar cómo evolucionan los datos de correspondientes a una fecha en el tiempo y cómo converge el valor. Aunque existen estadísticas [aquí](https://momo.isciii.es/public/momo/dashboard/momo_dashboard.html#notificacion) se pueden hacer estudios diferentes.
@@ -34,7 +34,7 @@ Para ello se necesita una plataforma que pueda correr los programas contenidos e
 
 Los scripts de descarga y versionado usan _shell scripts_ de _bash_, _wget_
 (sí, soy un clásico) y _git_. Las herramientas de postprocesado están hechas en
-_python_ con _pandas_. Una máquina corriendo un Unix (Linux, MacOS...) serviría tal cual si tienen disponibles esas herramientas. Otros entornos podrían requerir más trabajo.
+_python_ con _pandas_. Una máquina corriendo un Unix (Linux, MacOS...) serviría tal cual si tienen disponibles esas herramientas. Otros entornos podrían requerir más trabajo para ponerlo en marcha.
 
 Si bien el procedimiento de descarga y almacenamiento de los dataset es relativamente rápido. La acumulación de datos puede hacer que su tratamiento de los mismos lleve tiempo puede ser necesario que el tratamiento posterior de los datos se realice también como parte de las tareas periódicas o cambios en la estrategia del tratamiento de los datos ya que puede verse limitado por las capacidades (RAM) del sistema que hace el tratamiento (el uso de Big Data se debe empezar a considerar cuando el PC
 del analista no da más de sí). Se agradecen estrategias alternativas o mejoras a través de las secciones de "Issues" y "Pull Requests" que tiene el repositorio.
@@ -61,14 +61,11 @@ El programa asume que tiene acceso y permisos para hacer todo lo que necesita.
 
 * Localizar un dataset susceptible de ser versionado (de texto para poder aprovechar lo que ofrece git para control de versiones, con una variación de datos relativamente baja) y guardar su URL (que se almacenará en la variable _URLFILE_) para descargarlo con wget (petición GET normal).
 * Crear un directorio (que se almacenará en la variable _DATADIR_) en la máquina que va a alojar la serie descargada e inicializarlo como repositorio _git_. Si se desea puede emplearse el programa [bin/creaRepoGen.sh](bin/creaRepoGen.sh).
-* Decidir un nombre para el fichero (que se almacenará, path completo en la variable _DATAFILE_ ). El nombre no tiene por qué se el del fichero descargado.
+* Decidir un nombre para el fichero (que se almacenará, path completo en la variable _DATAFILE_ ). El nombre no tiene por qué ser el del fichero descargado.
 * Opcionalmente se puede crear un repositorio en un SCM remoto (_github.com_ por ejemplo) al que se subirá el local. Se deberá configurar en un destino _origin_ y para que la subida se haga sin necesidad de interactividad (sugerencia, clave SSH autorizada y uso de la variable de entorno _GIT_SSH_ para controlar la conexión a GIT)
 * Localizar un directorio para dejar ficheros temporales (cuya ubicación se almacenará en la variable _WRKDIR_) y elegir un nombre de fichero dentro de ese directorio para el fichero que se descargue (cuya ubicación se almacenará, path completo, en la variable _WRKDIR_)  
 * Crear un fichero de entorno que contendrá todas las variables antes mencionadas (más información, [aquí](#fichero-de-entorno))
-* Si es necesario realizar postprocesado en caso de que haya habido cambios, actualización
-
-
-
+* Si es necesario realizar postprocesado, en caso de que haya habido cambios en el repositorio, se invocará el script indicado en la variable de entorno _FOLLOWUPSCRIPT_.
 
 ### Configuración del lanzador
 
@@ -86,7 +83,7 @@ export GTS_CODEDIR=DONDEHAREELGITCLONE
 El programa de descargas [bin/descargaDatosGen.sh](bin/descargaDatosGen.sh) hace lo siguiente (las ubicaciones de todo se controlan mediante variables contenidas en un fichero cuya ubicación se pasa como parámetro):
 * Crea el directorio de trabajo (temporal) si no existe ya
 * Borra el último fichero descargado del directorio de trabajo
-* Descarga el dataset (fichero único) al directorio de trabajo
+* Descarga el dataset (fichero único) en el directorio de trabajo
 * Compara el fichero descargado con el fichero versionado (si lo hay). Si hay diferencias (o no hay fichero versionado) lo copia a la ubicación versionada y prepara el commit.
 * Si el repositorio tiene una ubicación remota, hace el push al SCM remoto.
 * Si hay configurado un programa de postprocesado, lo ejecuta.
@@ -132,7 +129,7 @@ Las variables que siguen a _FOLLOWUPSCRIPT_ son relevantes a [bin/pythonPostActi
 * *GTS_SCRIPTFILE* Programa python que va a procesar el repositorio _git_
 * *GTS_INFILE* Fichero que es la entrada del script indicado en *GTS_SCRIPTFILE*. Para que el conjunto sea eficiente, debería ser la salida de una ejecución anterior y que el programa sea incremental.   
 * *GTS_OUTFILE* Fichero que es la salida del script indicado en *GTS_SCRIPTFILE*.  
-* *GTS_VENV* es la ubicación del _virtual environment_ de _python_ que contiene las librerías necesarias para usar los scripts de postprocesado. Este _venv_ lo deberá  crear y actualizar el administrador cuando sea neceario. Se pueden encontrar instrucciones para crear el _venv_ [aquí](https://docs.python.org/3/library/venv.html). El listado de librerías necesarias para ejecutar el programa de postprocesado se puede encontrar en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt). En [](gitTimeSeries/requirements-dev.txt) se encuentran librerías que se pueden usar para un estudio de los datos descargados _offline_.
+* *GTS_VENV* es la ubicación del _virtual environment_ de _python_ que contiene las librerías necesarias para usar los scripts de postprocesado. Este _venv_ lo deberá  crear y actualizar el administrador cuando sea neceario. Se pueden encontrar instrucciones para crear el _venv_ [aquí](https://docs.python.org/3/library/venv.html). El listado de librerías necesarias para ejecutar el programa de postprocesado se puede encontrar en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt). En [gitTimeSeries/requirements-dev.txt](gitTimeSeries/requirements-dev.txt) se encuentran librerías que se pueden usar para un estudio de los datos descargados _offline_.
 
 ### Ejecución de postprocesado
 Como se indica en la sección [anterior](#fichero-de-entorno), es posible configurar el descargador para que ejecute un programa en caso de que haya habido una actualización en los datos. El patrón de ejecución es similar al del programa de descargas: un script/programa al que se le pasa como parámetro el mismo fichero (su ubicación) que se le pasó al programa de descargas.
@@ -144,21 +141,17 @@ El flujo de este programa es el siguiente:
 * Carga el fichero de variables de entorno que se ha pasado como parámetro.
 * Hace una comprobación de que todas las variables que necesita están definidas y son válidas.
 * Si el virtual environment no está creado (no hay una instancia de _python_ donde debía), lo crea.
-* Repasa la lista de módulos python necesarios (en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt)) y los carga/actualiza.
+* Repasa la lista de módulos python necesarios (en [gitTimeSeries/requirements.txt](gitTimeSeries/requirements.txt)) y los carga/actualiza si es necesario.
 * Calcula la ubicación del fichero de datos relativo (sacada de _DATAFILE_ y que trae ruta absoluta) a la raíz del repositorio (sacada de _DATADIR_) que serán parámetros del programa que se ejecute (sacado de _GTS_SCRIPTFILE_).
 * Ejecuta el programa. El programa usa las variables _GTS_INFILE_ y _GTS_OUTFILE_ como datos de entrada y salida, respectivamente.   
 * Si la ejecución es exitosa, pone a salvo el fichero (le añade la extensión _.prev_) que se usó de entrada (si el fichero existía) y copia el fichero de salida para que sea el fichero de entrada de la siguiente ejecución.
 
+### Programación de la ejecución.
 
+Para la ejecución de este programa la frecuencia debe estar acorde con la actualización del dataset y la frecuencia deseada de muestreo. En lo posible, hay que tratar de no sobrecargar el servidor remoto. Ejemplos: 
+* el MOMO en principio sólo cambia una vez al día (en el casi un año de ejecución sólo ha un caso de más de una actualización el mismo día) e interesa tener muestra de todos los días. Se puede sondear dos veces al día para prevenir (a las 9 y a las 21, por ejemplo) si hay un problema con la primera ejecución.   
 
+* para datos que se actualizan semanalmente con una vez al día sería suficiente
 
-
-
-
-
-
-
-
-Supongamos que tenemos un dataset que se modifica periódicamente y del que queremos observar cómo cambia. Ya tenemos la *URL*. 
-
-Creamos 
+El mecanismo de programar dependerá del sistema. El venerable [_cron_](https://opensource.com/article/17/11/how-use-cron-linux) y su variante _anacron_ (tambien cubierto en el artículo) pueden resolver el 
+problema.
