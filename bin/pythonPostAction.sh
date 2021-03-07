@@ -6,10 +6,6 @@ function adiosMundoCruel {
   exit 1
 }
 
-[ -n "${GTS_CODEDIR}" ] || adiosMundoCruel "No se ha especificado la variable GTS_CODEDIR"
-[ -n "${GTS_VENV}" ] || adiosMundoCruel "No se ha especificado la variable GTS_VENV"
-
-
 if [ "x$1" != "x" ]
 then
     ENVFILE=$1
@@ -17,6 +13,10 @@ then
 
     source ${ENVFILE}
 fi
+
+[ -n "${GTS_CODEDIR}" ] || adiosMundoCruel "No se ha especificado la variable GTS_CODEDIR"
+[ -n "${GTS_VENV}" ] || adiosMundoCruel "No se ha especificado la variable GTS_VENV"
+
 
 [ -n "${DATADIR}" ] || adiosMundoCruel "No se ha especificado la variable DATADIR"
 [ -n "${DATAFILE}" ] || adiosMundoCruel "No se ha especificado la variable DATAFILE"
@@ -34,9 +34,6 @@ else
   #Toca crear el virtualenv para ejecutar el python
   [ -d ${GTS_VENV} ] || rm -rf  ${GTS_VENV} || adiosMundoCruel "Problemas eliminando ${GTS_VENV}. Bye"
   python3 -mvenv --clear ${GTS_VENV}
-  source ${GTS_VENV}/bin/activate
-  pip install -U pip wheel
-
 fi
 
 #En cualquier caso, actualizamos paquetes, si procede
