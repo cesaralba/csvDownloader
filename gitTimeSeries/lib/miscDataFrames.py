@@ -3,6 +3,8 @@ from datetime import datetime
 from time import time
 from types import FunctionType
 
+from io import BytesIO
+
 import pandas as pd
 
 from utils.misc import listize
@@ -124,7 +126,8 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
 
-        newDF = readFunction(fileFromCommit(filePath, commit), **kwargs)
+        handle = BytesIO(fileFromCommit(filePath, commit).read())
+        newDF = readFunction(handle, **kwargs)
 
         _, changed, added = compareDataFrames(newDF, DFcurrent)
         newDF['shaCommit'] = commitSHA
