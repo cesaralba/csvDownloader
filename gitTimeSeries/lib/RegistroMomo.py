@@ -61,7 +61,6 @@ def leeDatosMomoFila(fname, columna='defunciones_observadas'):
 
 
 def leeDatosMomoDF(fname_or_handle, **kwargs):
-
     myDF = leeCSVdataset(fname_or_handle, colIndex=COLIDX, cols2drop=COLS2DROP, colDates=['fecha_defuncion'], **kwargs)
     myDF.index = indexFillNAs(myDF.index, replacementValues=INDEXNAREPLACER)
 
@@ -112,9 +111,6 @@ def iterateOverGitRepo(REPOLOC, fname, readFunction=leeDatosMomoFila, **kwargs):
                     auxDict[commitDate] = myDF
 
                 break
-
-    if not auxDict:
-        return None
 
     result = pd.concat(auxDict, sort=True).droplevel(1).sort_index()
     result.index = pd.DatetimeIndex(result.index, freq='D', name='fechaCommit')

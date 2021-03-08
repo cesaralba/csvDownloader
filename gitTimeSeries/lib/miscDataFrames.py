@@ -1,9 +1,9 @@
 from collections import defaultdict
 from datetime import datetime
+from io import BytesIO
+from os import path
 from time import time
 from types import FunctionType
-
-from io import BytesIO
 
 import pandas as pd
 
@@ -65,11 +65,12 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
 
     if colDates:
         if isinstance(colDates, str):
-            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True}}
+            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
         elif isinstance(colDates, (list, set)):
-            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True} for colName in colDates}
+            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
+                             colDates}
         elif isinstance(colDates, dict):
-            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat} for colName, colFormat in
+            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
                              colDates.items()}
         else:
             raise TypeError(
@@ -374,3 +375,51 @@ def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs)
                 resultDF[counterName] = dfOld[counterName] + indiceCambiadas
 
     return resultDF, statMsg
+
+
+def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaObj, minDate: datetime = None, **kwargs):
+    fname = path.join(repoPath, filePath)
+    formatoLog = "DFVersionado2TSofTS: {dur:7.3f}s: commitDate: {commitDate}"
+    reqFreq = kwargs.get('freq', None)
+    if 'freq' in kwargs:
+        kwargs.pop('freq')
+
+    fechaUltimaActualizacion = None
+    if minDate:
+        fechaUltimaActualizacion = minDate
+
+    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
+
+    auxDict = dict()
+
+    for commit in repoIterator:
+        timeStart = time()
+        commitSHA = commit.hexsha
+        commitDate = commit.committed_datetime
+
+        handle = BytesIO(fileFromCommit(filePath, commit).read())
+        newDF = readFunctionFila(handle, columnaObj, **kwargs)
+
+        if newDF is None:
+            print(f"DFVersionado2TSofTS: {fname}. Commit {commitSHA}[{commitDate}] Problemas leyendo dataframe")
+            continue
+
+        if newDF.empty:
+            print(f"DFVersionado2TSofTS: {fname}. Commit {commitSHA}[{commitDate}] DF empty")
+            continue
+
+        auxDict[commitDate] = newDF
+
+    if not auxDict:
+        return None
+
+    auxDF = pd.concat(auxDict, sort=True)
+    result = auxDF.droplevel(1).sort_index()
+
+    result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name='fechaCommit', freq=reqFreq)
+
+    timeStop = time()
+    strContParciales = ""
+    print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate))
+
+    return result
