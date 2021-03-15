@@ -217,6 +217,10 @@ def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=
     areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
                                                         columnasObj=columnasObj)
 
+    if (areRowsDifferent is None) or areRowsDifferent.empty:
+        print("cuentaFilasCambiadas EMPTY or None", columnasObj)
+        return 0, None
+
     return areRowsDifferent.sum(), areRowsDifferent
 
 
@@ -423,3 +427,143 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
     print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate))
 
     return result
+
+
+def cambiosDelDiaGrupo(df):
+    sigColNan = df.head(1).isna().shift(-1, axis=1, fill_value=True).iloc[0]
+
+    dfRef = df.apply(ponMedidaPrefijo, sigColNanV=sigColNan)
+
+    return df - dfRef
+
+
+def cambiosDelDia(df):
+    """
+    Calcula la diferencia con la entrada del día anterior
+    :param df:
+    :return:
+    """
+    columnasFecha = indiceDeTipo(df.columns,"datetime")
+    grupos = df.columns.to_frame().reset_index(drop=True).drop(columns=columnasFecha).drop_duplicates().T.to_dict().values()
+
+    auxResult = []
+    for filtro in grupos:
+        dfReduc = filtraColumnasDF(df, colDict=filtro)
+        difGrupo = cambiosDelDiaGrupo(dfReduc)
+
+        auxResult.append(difGrupo)
+
+    return pd.concat(auxResult, axis=1)
+
+
+def filtraColumnasDF(df, colDict=None, conv2ts=False):
+    """
+    Devuelve las columnas de un dataframe que cumplen determinadas condiciones
+
+    :param df: Dataframe
+    :param colDict: diccionario con condiciones a cumplir. Las cumple todas y la condición es igualdad
+        dada una columna cuyos índices son col={ kc:vc } para cada {k:v} se deben cumplir todas las condiciones
+        col[k] == v. k puede ser la posición en la tupla o el nombre en el índice si están definidos.
+    :param conv2ts: trata de convertir el DF resultante a una serie temporal (si se puede). El
+       requisito es que el campo fecha de las columnas no se repita. Si se puede, se pierde el resto
+       de los campos de las columnas (ámbito, ccaa, edad, sexo)
+
+    :return: Dataframe con las columnas que cumplen las condiciones
+
+        Ejemplo:
+         df.columns = MultiIndex([('2018-05-10',     'ccaa', 'Andalucía', 'hombres', 'edad 65-74'),
+            ...
+            ('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')],
+           names=['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad'], length=181920)
+
+        filtraColumnasDF(df, { 1:'nacional': 'nombre_sexo': 'mujeres' }) devuelve
+
+        df[[('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')]]
+
+    """
+
+    if not colDict:
+        return df
+
+    dfColumns = df.columns
+
+    esMultiCol = all([isinstance(c, tuple) for c in dfColumns.to_list()])
+
+    numClaves = max([len(c) for c in dfColumns.to_list()]) if esMultiCol else 1
+    nomClaves = list(dfColumns.names)
+    clave2i = dict(zip(nomClaves, range(numClaves)))
+
+    checkConds = [k < numClaves if isinstance(k, (int)) else (k in nomClaves) for k in colDict.keys()]
+
+    if not all(checkConds):
+        failedConds = [cond for cond, check in zip(colDict.items(), checkConds) if not check]
+        print(failedConds)
+        condsMsg = ",".join(map(lambda x: '"' + str(x) + '"', failedConds))
+        raise ValueError("filtraColumnasDF: condiciones incorrectas: %s" % condsMsg)
+
+    funcCheckMulti = lambda x: all([x[k if isinstance(k, int) else clave2i[k]] == v for k, v in colDict.items()])
+    funcCheckSingle = lambda x: (x == list(colDict.values())[0])
+
+    colsOk = [c for c in dfColumns.to_list() if (funcCheckMulti if esMultiCol else funcCheckSingle)(c)]
+
+    if not colsOk:
+        raise KeyError(
+            "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
+                str(colDict), dfColumns.to_list()))
+
+    result = df[colsOk]
+    if not conv2ts:  # Don't want conversion, nothing else to do
+        return result
+
+    fechasOk = [c[0] for c in colsOk]
+    if len(set(fechasOk)) == len(colsOk):
+        tsCols = pd.DatetimeIndex(fechasOk)
+        result.columns = tsCols
+        return result
+
+    return result
+
+
+def ponMedidaPrefijo(col, sigColNanV=None, defaultNan=False):
+    colName = col.name
+
+    sigNan = defaultNan if sigColNanV is None else sigColNanV[colName]
+
+    primNonNan = col.reset_index(drop=True).first_valid_index()
+    primVal = col.iloc[primNonNan] if (primNonNan == 0 and not sigNan) else 0
+    result = col.shift(1)
+    result.iloc[primNonNan] = primVal
+
+    return result
+
+
+def nombreTipoCamposIndice(dfIndex: pd.MultiIndex) -> pd.Series:
+    """
+    Dado un multiíndice devuelve los tipos de los campos que lo componen (cadena de texto)
+    :param dfIndex: multiíndice de dataframe
+    :return: Serie de cadenas con los tipos de cada campo del índice
+    """
+    result = dfIndex.to_frame(index=False).dtypes.map(str)
+
+    return result
+
+
+def indiceDeTipo(dfIndex: pd.MultiIndex, prefijo):
+    def getMatcher(prefijos):
+        def coincideCadena(c:str) -> bool:
+            return any([c.startswith(p) for p in prefijos])
+
+        return coincideCadena
+
+    nombresTipo = nombreTipoCamposIndice(dfIndex)
+
+    listaPrefs = listize(prefijo)
+
+    matcher = getMatcher(listaPrefs)
+
+    resultSerie = nombresTipo.apply(matcher)
+
+    result = resultSerie.loc[resultSerie].index.to_list()
+
+    return result
+

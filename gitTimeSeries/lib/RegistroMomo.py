@@ -30,7 +30,7 @@ ESTADSCAMBIO = {'cambObs': ['defunciones_observadas'],
 DATECOLS = ['fecha_defuncion', 'fechaCommit']
 
 
-def leeDatosMomoFila(fname, columna='defunciones_observadas'):
+def leeDatosMomoFila(fname, columna):
     """
     Lee un fichero diario de Momo
     ( https://momo.isciii.es/public/momo/data, https://momo.isciii.es/public/momo/dashboard/momo_dashboard.html#datos )
