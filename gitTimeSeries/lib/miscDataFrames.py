@@ -11,7 +11,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from utils.misc import listize
-from .GitIterator import GitIterator, fileFromCommit
+from .GitIterator import fileFromCommit, GitIterator
 
 
 def applyScaler(dfTS, year=2019, scalerCls=StandardScaler):

@@ -1,8 +1,8 @@
 import pandas as pd
 from configargparse import ArgumentParser
 
-from lib.RegistroMomo import COLSADDED, COLIDX, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
-from lib.miscDataFrames import DFVersionado2DFmerged, leeDatosHistoricos, grabaDatosHistoricos
+from lib.miscDataFrames import DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
+from lib.RegistroMomo import COLIDX, COLSADDED, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
 
 
 # TODO: Logging como dios manda

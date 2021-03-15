@@ -1,6 +1,6 @@
 import pandas as pd
 
-from .miscDataFrames import leeCSVdataset, indexFillNAs, estadisticaCategoricals, estadisticaFechaCambios
+from .miscDataFrames import estadisticaCategoricals, estadisticaFechaCambios, indexFillNAs, leeCSVdataset
 
 DEFAULTCOMMIT = [0]
 
@@ -59,5 +59,3 @@ def leeDatosMomoDF(fname_or_handle, **kwargs):
     myDF.index = indexFillNAs(myDF.index, replacementValues=INDEXNAREPLACER)
 
     return myDF
-
-

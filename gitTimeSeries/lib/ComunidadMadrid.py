@@ -13,7 +13,6 @@ ESTADSCAMBIO = {'c_conf_act_u14': ['casos_confirmados_activos_ultimos_14dias'],
                 'ti_acum_act_u14': ['tasa_incidencia_acumulada_activos_ultimos_14dias'],
                 'ti_acum_tot': ['tasa_incidencia_acumulada_total']}
 
-
 csv.register_dialect('IDA', delimiter=';', lineterminator='\r\n')
 
 
