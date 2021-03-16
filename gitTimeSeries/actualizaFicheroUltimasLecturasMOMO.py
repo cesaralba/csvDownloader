@@ -1,15 +1,15 @@
 import pandas as pd
 from configargparse import ArgumentParser
 
-from lib.miscDataFrames import DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
-from lib.RegistroMomo import COLIDX, COLSADDED, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
+from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
+from lib.RegistroMomo import COLIDX, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
 
 
 # TODO: Logging como dios manda
 
 def leeFicheroEntrada(fname, create=False):
     try:
-        result = leeDatosHistoricos(fname, extraCols=COLSADDED, colsIndex=COLIDX, colsDate=DATECOLS,
+        result = leeDatosHistoricos(fname, extraCols=COLSADDEDMERGED, colsIndex=COLIDX, colsDate=DATECOLS,
                                     changeCounters=ESTADSCAMBIO)
     except FileNotFoundError as exc:
         if create:

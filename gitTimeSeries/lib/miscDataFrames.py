@@ -694,3 +694,6 @@ def reordenaColumnas(df, dfRef):
 
 def ultValorColumna(df):
     return df.apply(lambda x: x[x.last_valid_index()])
+
+
+COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']

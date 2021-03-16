@@ -7,7 +7,6 @@ DEFAULTCOMMIT = [0]
 COLIDX = ['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad']
 COLS2DROP = ['cod_ambito', 'cod_ine_ambito', 'cod_sexo', 'cod_gedad']
 INDEXNAREPLACER = {'nombre_ambito': 'España'}
-COLSADDED = ['shaCommit', 'fechaCommit', 'contCambios']
 
 VALORESAGRUP = {'nacional', 'todos'}
 
