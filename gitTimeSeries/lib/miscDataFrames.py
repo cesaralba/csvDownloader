@@ -12,7 +12,7 @@ from time import time
 
 from utils.misc import listize
 from utils.pandas import DF2maxValues
-from .GitIterator import fileFromCommit, GitIterator
+from utils.GitIterator import fileFromCommit, GitIterator
 
 COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
 
