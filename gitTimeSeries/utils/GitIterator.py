@@ -1,5 +1,5 @@
 from git import Repo
-
+import pandas as pd
 
 class GitIterator(object):
     """
@@ -17,7 +17,7 @@ class GitIterator(object):
 
         self.repoPath = repoPath
         self.repo = Repo(repoPath)
-        self.minDate = minDate
+        self.minDate = pd.to_datetime(minDate) if minDate else minDate
         self.reverse = reverse
         self.currCommit = 0
 

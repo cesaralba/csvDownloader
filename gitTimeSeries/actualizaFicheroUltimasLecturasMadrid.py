@@ -1,16 +1,19 @@
 import pandas as pd
 from configargparse import ArgumentParser
 
+from lib.ComunidadMadrid import COLDATES, COLIDX, ESTADSCAMBIO, leeDatosMadDF
 from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
-from lib.RegistroMomo import COLIDX, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
+from utils.misc import listize
 
 
 # TODO: Logging como dios manda
 
-def leeFicheroEntrada(fname, create=False):
+def leeFicheroHistEntrada(fname, colzona, create=False):
     try:
-        result = leeDatosHistoricos(fname, extraCols=COLSADDEDMERGED, colsIndex=COLIDX, colsDate=DATECOLS,
+        colsIndex = sorted(set(COLIDX + listize(colzona)))
+        result = leeDatosHistoricos(fname, extraCols=COLSADDEDMERGED, colsIndex=colsIndex, colsDate=COLDATES,
                                     changeCounters=ESTADSCAMBIO)
+
     except FileNotFoundError as exc:
         if create:
             return None
@@ -49,6 +52,10 @@ def parse_arguments():
     parser.add('-f', dest='csvPath', type=str, env_var='GTS_CSVPATH',
                help='Ubicación del fichero de dataset dentro del repositorio GIT', required=True)
 
+    parser.add('-t', dest='colIndice', type=str, env_var='GTS_INDEXCOL',
+               choices=['zona_basica_salud', 'municipio_distrito'],
+               help='Columnas se van a usar como indice del dataframe', required=True)
+
     parser.add('-c', dest='create', action="store_true", env_var='GTS_CREATE', required=False,
                help='Inicializa el fichero si no existe ya', default=False)
 
@@ -58,10 +65,15 @@ def parse_arguments():
 
 
 def main(args):
-    momoActual = leeFicheroEntrada(args.infile, args.create) if 'infile' in args and args.infile else None
+    momoActual = leeFicheroHistEntrada(args.infile, colzona=args.colIndice,
+                                       create=args.create) if 'infile' in args and args.infile else None
 
-    result = DFVersionado2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMomoDF, DFcurrent=momoActual,
-                                   changeCounters=ESTADSCAMBIO)
+    try:
+        result = DFVersionado2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMadDF, DFcurrent=momoActual,
+                                       changeCounters=ESTADSCAMBIO, extraIndexes=args.colIndice)
+    except ValueError as exc:
+        print(exc)
+        exit(1)
 
     grabaDatosHistoricos(result, args.outfile)
 

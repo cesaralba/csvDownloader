@@ -5,4 +5,3 @@ def listize(param):
     :return:
     """
     return param if isinstance(param, (list, set, tuple)) else [param]
-

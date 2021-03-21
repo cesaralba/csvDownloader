@@ -1,12 +1,175 @@
+import csv
 from collections import defaultdict
 from datetime import datetime
-from time import time
+from io import BytesIO
+from os import path
 from types import FunctionType
 
+import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from time import time
 
 from utils.misc import listize
-from .GitIterator import GitIterator, fileFromCommit
+from utils.pandas import DF2maxValues
+from utils.GitIterator import fileFromCommit, GitIterator
+
+COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
+
+
+def applyScaler(dfTS, year=2019, scalerCls=StandardScaler):
+    scaler = scalerCls()
+    valTrain = dfTS.loc[dfTS.index.year == year]
+    scaler.fit(valTrain)
+
+    result = pd.DataFrame(scaler.transform(dfTS), columns=dfTS.columns, index=dfTS.index)
+
+    return result
+
+
+def cambiosDelDia(df):
+    """
+    Calcula la diferencia con la entrada del día anterior
+    :param df:
+    :return:
+    """
+    columnasFecha = indiceDeTipo(df.columns, "datetime")
+    grupos = df.columns.to_frame().reset_index(drop=True).drop(
+        columns=columnasFecha).drop_duplicates().T.to_dict().values()
+
+    auxResult = []
+    for filtro in grupos:
+        dfReduc = filtraColumnasDF(df, colDict=filtro)
+        difGrupo = cambiosDelDiaGrupo(dfReduc)
+
+        auxResult.append(difGrupo)
+
+    return pd.concat(auxResult, axis=1)
+
+
+def cambiosDelDiaGrupo(df):
+    sigColNan = df.head(1).isna().shift(-1, axis=1, fill_value=True).iloc[0]
+
+    dfRef = df.apply(ponMedidaPrefijo, sigColNanV=sigColNan)
+
+    return df - dfRef
+
+
+def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs):
+    statMsg = dict()
+    resultDF = dfNew
+
+    changeCounters = {} if changeCounters is None else changeCounters
+
+    for counterName, counterConf in changeCounters.items():
+        # Valores por defecto
+        funcionCuenta = cuentaFilasCambiadas
+
+        if isinstance(counterConf, list):
+            kwargs['columnasObj'] = counterConf
+        elif isinstance(counterConf, FunctionType):
+            funcionCuenta = counterConf
+        elif isinstance(counterConf, dict):
+            kwargs.update(counterConf)
+            funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
+
+        resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfOld, dfNew, **kwargs)
+
+        if isinstance(resultCuenta, dict):
+            for k in sorted(resultCuenta):
+                finalK = f"{counterName}.{k}"
+                valorK = resultCuenta[k]
+                statMsg[finalK] = valorK
+        else:
+            statMsg[counterName] = resultCuenta
+            if indiceCambiadas is not None:
+                resultDF[counterName] = dfOld[counterName] + indiceCambiadas
+
+    return resultDF, statMsg
+
+
+def changeCounters2newColumns(dfNewlines, changeCounters=None):
+    changeCounters = {} if changeCounters is None else changeCounters
+
+    for counterName, counterConf in changeCounters.items():
+        if isinstance(counterConf, dict):
+            if counterConf.get('creaColumna', False):
+                nombreColumna = counterConf.get('nombreColumna', counterName)
+                dfNewlines[nombreColumna] = 0
+        else:
+            dfNewlines[counterName] = 0
+
+    return dfNewlines
+
+
+def changeCounters2ReqColNames(changeCounters: dict = None):
+    """
+    Dado un diccionario con estadistacas de contador de cambios, extrae las columnas que aparecerían en el DF histórico
+    (columnas que se buscan + las que se añaden)
+    :param changeCounters:
+    :return:
+    """
+    if changeCounters is None:
+        return []
+
+    result = []
+    for counterName, counterConf in changeCounters.items():
+        if isinstance(counterConf, dict):
+            if counterConf.get('creaColumna', False):
+                nombreColumna = counterConf.get('nombreColumna', counterName)
+                result.append(nombreColumna)
+            if 'columnasObj' in counterConf:
+                columnasAmirar = listize(counterConf['columnasObj'])
+                result.extend(columnasAmirar)
+        elif isinstance(counterConf, list):
+            result.append(counterName)
+            result.extend(counterConf)
+
+    return result
+
+
+def colDates2ReqColNames(colDates=None):
+    """
+    Devuelve la lista de columnas que se van a convertir en fecha
+    :param colDates:
+    :return:
+    """
+    result = set()
+    if colDates:
+        if isinstance(colDates, str):
+            result = {colDates}
+        elif isinstance(colDates, (list, set)):
+            result = set(colDates)
+        elif isinstance(colDates, dict):
+            result = set(colDates.keys())
+        else:
+            raise TypeError(
+                f"colDates2ReqColNames: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+    return result
+
+
+def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
+    if len(dfCambiadoOld) != len(dfCambiadoNew):
+        raise ValueError(f"cuentaFilas: longitudes difieren Old:{len(dfCambiadoOld)} != New:{len(dfCambiadoNew)}")
+    if len(dfCambiadoOld) == 0:
+        return 0
+
+    auxColsObj = listize(columnasObj)
+    counterCols = dfCambiadoNew.columns.difference(COLSADDEDMERGED)
+
+    if columnasObj:
+        missingColsNew = set(auxColsObj).difference(dfCambiadoNew.columns)
+
+        if missingColsNew:
+            print(
+                f"columnasCambiadasParaEstadistica: {counterName}: columnas desconocidas: {sorted(missingColsNew)}. ",
+                f"Columnas existentes: {sorted(list(dfCambiadoOld.columns))}. Ignorando contador.")
+            return None
+        counterCols = auxColsObj
+
+    NAfiller = DF2maxValues(dfCambiadoOld, counterCols)
+    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[counterCols]).any(axis=1)
+    return areRowsDifferent
 
 
 def compareDataFrameIndexes(new: pd.DataFrame, old: pd.DataFrame = None):
@@ -38,9 +201,12 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
     removed, shared, added = compareDataFrameIndexes(new, old)
 
     if len(shared):
-        oldData = old[new.columns]
+        targetCols = new.columns.intersection(old.columns).difference(COLSADDEDMERGED)
+        oldData = old[targetCols]
 
-        areRowsDifferent = (oldData.loc[shared, :] != new.loc[shared, :]).any(axis=1)
+        NAfiller = DF2maxValues(old, targetCols)
+
+        areRowsDifferent = (oldData.fillna(value=NAfiller).loc[shared, targetCols] != new.fillna(value=NAfiller).loc[shared, targetCols]).any(axis=1)
         changed = areRowsDifferent.loc[areRowsDifferent].index
     else:
         changed = shared.take([])
@@ -48,40 +214,15 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
     return removed, changed, added
 
 
-def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
-    """
-    Lee un dataframe (en CSV) y le hace un tratamiento mínimo: fija columnas de índice, elmina columnas y convierte en fecha
-    :param fname_or_handle: nombre de fichero o handle para acceder al dataframe
-    :param colIndex: columnas que formarán el índice (nombre o lista)
-    :param cols2drop: columnas que se van a eliminar (lista)
-    :param colDates: columnas que se van a convertir en fechas (nombre de la columna, lista de nombres, diccionario con
-                     pares: nombre:formatoEsperado
-    :param kwargs: parámetros que se le pasan a pd.read_csv
-    :return: dataframe
-    """
-    myDF = pd.read_csv(fname_or_handle, **kwargs)
+def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None, **kwargs):
+    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
+                                                        columnasObj=columnasObj)
 
-    if colDates:
-        if isinstance(colDates, str):
-            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True}}
-        elif isinstance(colDates, (list, set)):
-            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True} for colName in colDates}
-        elif isinstance(colDates, dict):
-            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat} for colName, colFormat in
-                             colDates.items()}
-        else:
-            raise TypeError(
-                f"leeCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+    if (areRowsDifferent is None) or areRowsDifferent.empty:
+        print(f"cuentaFilasCambiadas: {counterName}:{columnasObj} EMPTY or None", columnasObj)
+        return 0, None
 
-        for colName, args in conversorArgs.items():
-            myDF[colName] = pd.to_datetime(**args)
-
-    resultDropped = myDF.drop(columns=cols2drop) if cols2drop else myDF
-    resultIndex = resultDropped.set_index(colIndex) if colIndex else resultDropped
-
-    result = resultIndex
-
-    return result
+    return areRowsDifferent.sum(), areRowsDifferent
 
 
 def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: pd.DataFrame = None,
@@ -108,7 +249,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Columnas adicionales (metadata del último cambio referido al repo que lo contiene)
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
-    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6}{contParciales}"
+    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
     fechaUltimaActualizacion = None
 
     if minDate:
@@ -124,14 +265,21 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
 
-        newDF = readFunction(fileFromCommit(filePath, commit), **kwargs)
+        handle = BytesIO(fileFromCommit(filePath, commit).read())
 
-        _, changed, added = compareDataFrames(newDF, DFcurrent)
+        try:
+            newDF = readFunction(handle, **kwargs)
+        except ValueError as exc:
+            print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
+            raise exc
+
+        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFcurrent)
         newDF['shaCommit'] = commitSHA
         newDF['fechaCommit'] = pd.to_datetime(commitDate)
 
-        if len(added):
-            newData = newDF.loc[added, :]
+        newData = pd.DataFrame()
+        if len(nuevas):
+            newData = newDF.loc[nuevas, :]
             newData['contCambios'] = 0
 
             newData = changeCounters2newColumns(dfNewlines=newData, changeCounters=changeCounters)
@@ -139,81 +287,117 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             if DFcurrent is None:
                 DFcurrent = newData
                 timeStop = time()
-                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed),
-                                        contParciales="", added=len(added)))
+                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
+                                        contParciales="", added=len(nuevas), removed=0))
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
-        if len(changed):
-            dfCambiadoOld = DFcurrent.loc[changed]
-            dfCambiadoNew = newDF.loc[changed]
+        if len(cambiadas):
+            dfCambiadoOld = DFcurrent.loc[cambiadas]
+            dfCambiadoNew = newDF.loc[cambiadas]
             dfCambiadoNew['contCambios'] = dfCambiadoOld['contCambios'] + 1
 
             restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
 
             newConStats, msgStats = changeCounters2changedDataStats(dfCambiadoOld, dfCambiadoNew, changeCounters,
                                                                     **restoArgs)
-            DFcurrent.loc[changed] = newConStats
+            DFcurrent.loc[cambiadas] = newConStats
             estadCambios.update(msgStats)
 
-        if len(added):
+        if len(nuevas):
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
         timeStop = time()
         strContParciales = ""
         if changeCounters:
             strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
-        print(
-            formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed), added=len(added),
-                              contParciales=strContParciales))
+        print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
+                                added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
 
     return DFcurrent
 
 
-def indexFillNAs(indexdata: pd.MultiIndex, replacementValues: dict):
-    """
-    Reemplaza los NAs de niveles de índice por valores configurables por nivel.
-    :param indexdata: Indice a tratar
-    :param replacementValues: diccionario con "nivel":"valor de reemplazo"
-    :return:
-    """
-    newData = []
-    for name in indexdata.names:
-        dataLevel = indexdata.get_level_values(name).fillna(
-            replacementValues[name]) if name in replacementValues else indexdata.get_level_values(name)
-        newData.append(dataLevel)
+def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaObj, minDate: datetime = None, **kwargs):
+    fname = path.join(repoPath, filePath)
+    formatoLog = "DFVersionado2TSofTS: {fname} {dur:7.3f}s"
+    reqFreq = kwargs.get('freq', None)
+    if 'freq' in kwargs:
+        kwargs.pop('freq')
 
-    result = pd.MultiIndex.from_arrays(newData, names=indexdata.names)
+    timeStart = time()
+
+    fechaUltimaActualizacion = None
+    if minDate:
+        fechaUltimaActualizacion = minDate
+
+    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
+
+    auxDict = dict()
+
+    for commit in repoIterator:
+        commitSHA = commit.hexsha
+        commitDate = commit.committed_datetime
+
+        handle = BytesIO(fileFromCommit(filePath, commit).read())
+        newDF = readFunctionFila(handle, columnaObj, **kwargs)
+
+        if newDF is None:
+            print(f"DFVersionado2TSofTS: {fname}. Commit {commitSHA}[{commitDate}] Problemas leyendo dataframe")
+            continue
+
+        if newDF.empty:
+            print(f"DFVersionado2TSofTS: {fname}. Commit {commitSHA}[{commitDate}] DF empty")
+            continue
+
+        auxDict[commitDate] = newDF
+
+    if not auxDict:
+        return None
+
+    auxDF = pd.concat(auxDict, sort=True)
+    result = auxDF.droplevel(1).sort_index()
+
+    result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name='fechaCommit', freq=reqFreq)
+
+    timeStop = time()
+    print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
 
     return result
 
 
-def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
-    if len(dfCambiadoOld) != len(dfCambiadoNew):
-        raise ValueError(f"cuentaFilas: longitudes difieren Old:{len(dfCambiadoOld)} != New:{len(dfCambiadoNew)}")
-    if len(dfCambiadoOld) == 0:
-        return 0
+def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: datetime = None, **kwargs):
+    timeStart = time()
 
-    auxColsObj = listize(columnasObj)
-    counterCols = dfCambiadoOld.columns
-    if columnasObj:
-        missingColsNew = set(auxColsObj).difference(dfCambiadoNew.columns)
+    result = dict()
+    fname = path.join(repoPath, filePath)
+    formatoLog = "DFVersionado2DFmerged: {fname} {dur:7.3f}s: "
+    fechaUltimaActualizacion = None
 
-        if missingColsNew:
-            print(
-                f"columnasCambiadasParaEstadistica: {counterName}: columnas desconocidas: {sorted(missingColsNew)}. ",
-                f"Columnas existentes: {sorted(list(dfCambiadoOld.columns))}. Ignorando contador.")
-            return None
-        counterCols = auxColsObj
+    if minDate:
+        fechaUltimaActualizacion = minDate
 
-    areRowsDifferent = (dfCambiadoOld[counterCols] != dfCambiadoNew[counterCols]).any(axis=1)
-    return areRowsDifferent
+    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
 
+    for commit in repoIterator:
+        commitSHA = commit.hexsha
+        commitDate = commit.committed_datetime
 
-def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None, **kwargs):
-    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
-                                                        columnasObj=columnasObj)
+        handle = BytesIO(fileFromCommit(filePath, commit).read())
 
-    return areRowsDifferent.sum(), areRowsDifferent
+        try:
+            newDF = readFunction(handle, **kwargs)
+            newDF['shaCommit'] = commitSHA
+            newDF['fechaCommit'] = pd.to_datetime(commitDate)
+        except ValueError as exc:
+            print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
+            raise exc
+
+        result[commitDate] = newDF
+
+    timeStop = time()
+
+    print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
+
+    return result
 
 
 def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, columnasObj=None,
@@ -300,74 +484,305 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     return result, None
 
 
-def changeCounters2ReqColNames(changeCounters: dict = None):
+def filtraColumnasDF(df, colDict=None, conv2ts=False):
     """
-    Dado un diccionario con estadistacas de contador de cambios, extrae las columnas que aparecerían en el DF histórico
-    (columnas que se buscan + las que se añaden)
-    :param changeCounters:
-    :return:
-    """
-    if changeCounters is None:
-        return []
+    Devuelve las columnas de un dataframe que cumplen determinadas condiciones
 
-    result = []
-    for counterName, counterConf in changeCounters.items():
-        if isinstance(counterConf, dict):
-            if counterConf.get('creaColumna', False):
-                nombreColumna = counterConf.get('nombreColumna', counterName)
-                result.append(nombreColumna)
-            if 'columnasObj' in counterConf:
-                columnasAmirar = listize(counterConf['columnasObj'])
-                result.extend(columnasAmirar)
-        elif isinstance(counterConf, list):
-            result.append(counterName)
-            result.extend(counterConf)
+    :param df: Dataframe
+    :param colDict: diccionario con condiciones a cumplir. Las cumple todas y la condición es igualdad
+        dada una columna cuyos índices son col={ kc:vc } para cada {k:v} se deben cumplir todas las condiciones
+        col[k] == v. k puede ser la posición en la tupla o el nombre en el índice si están definidos.
+    :param conv2ts: trata de convertir el DF resultante a una serie temporal (si se puede). El
+       requisito es que el campo fecha de las columnas no se repita. Si se puede, se pierde el resto
+       de los campos de las columnas (ámbito, ccaa, edad, sexo)
+
+    :return: Dataframe con las columnas que cumplen las condiciones
+
+        Ejemplo:
+         df.columns = MultiIndex([('2018-05-10',     'ccaa', 'Andalucía', 'hombres', 'edad 65-74'),
+            ...
+            ('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')],
+           names=['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad'], length=181920)
+
+        filtraColumnasDF(df, { 1:'nacional': 'nombre_sexo': 'mujeres' }) devuelve
+
+        df[[('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')]]
+
+    """
+
+    if not colDict:
+        return df
+
+    dfColumns = df.columns
+
+    esMultiCol = all([isinstance(c, tuple) for c in dfColumns.to_list()])
+
+    numClaves = max([len(c) for c in dfColumns.to_list()]) if esMultiCol else 1
+    nomClaves = list(dfColumns.names)
+    clave2i = dict(zip(nomClaves, range(numClaves)))
+
+    checkConds = [k < numClaves if isinstance(k, (int)) else (k in nomClaves) for k in colDict.keys()]
+
+    if not all(checkConds):
+        failedConds = [cond for cond, check in zip(colDict.items(), checkConds) if not check]
+        print(failedConds)
+        condsMsg = ",".join(map(lambda x: '"' + str(x) + '"', failedConds))
+        raise ValueError("filtraColumnasDF: condiciones incorrectas: %s" % condsMsg)
+
+    funcCheckMulti = lambda x: all([x[k if isinstance(k, int) else clave2i[k]] == v for k, v in colDict.items()])
+    funcCheckSingle = lambda x: (x == list(colDict.values())[0])
+
+    colsOk = [c for c in dfColumns.to_list() if (funcCheckMulti if esMultiCol else funcCheckSingle)(c)]
+
+    if not colsOk:
+        raise KeyError(
+            "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
+                str(colDict), dfColumns.to_list()))
+
+    result = df[colsOk]
+    if not conv2ts:  # Don't want conversion, nothing else to do
+        return result
+
+    fechasOk = [c[0] for c in colsOk]
+    if len(set(fechasOk)) == len(colsOk):
+        tsCols = pd.DatetimeIndex(fechasOk)
+        result.columns = tsCols
+        return result
 
     return result
 
 
-def changeCounters2newColumns(dfNewlines, changeCounters=None):
-    changeCounters = {} if changeCounters is None else changeCounters
+def filtraFilasSerie(serie, indDict=None, conv2ts=False):
+    """
+    Devuelve las filas de un serie que cumplen determinadas condiciones
 
-    for counterName, counterConf in changeCounters.items():
-        if isinstance(counterConf, dict):
-            if counterConf.get('creaColumna', False):
-                nombreColumna = counterConf.get('nombreColumna', counterName)
-                dfNewlines[nombreColumna] = 0
+    :param serie: Serie
+    :param indDict: diccionario con condiciones a cumplir. Las cumple todas y la condición es igualdad
+        dada una columna cuyos índices son col={ kc:vc } para cada {k:v} se deben cumplir todas las condiciones
+        col[k] == v. k puede ser la posición en la tupla o el nombre en el índice si están definidos.
+    :param conv2ts: trata de convertir el DF resultante a una serie temporal (si se puede). El
+       requisito es que el campo fecha de las columnas no se repita. Si se puede, se pierde el resto
+       de los campos de las columnas (ámbito, ccaa, edad, sexo)
+
+    :return: Serie con las fila que cumplen las condiciones
+
+        Ejemplo:
+         serie.index = MultiIndex([('2018-05-10',     'ccaa', 'Andalucía', 'hombres', 'edad 65-74'),
+            ...
+            ('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')],
+           names=['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_gedad'], length=181920)
+
+        filtraFilasSerie(serie, { 1:'nacional': 'nombre_sexo': 'mujeres' }) devuelve
+
+        serie[[('2020-06-05', 'nacional',    'España', 'mujeres', 'edad 65-74')]]
+
+    """
+
+    if not indDict:
+        return serie
+
+    serieIndex = serie.index
+
+    esMultiInd = all([isinstance(c, tuple) for c in serieIndex.to_list()])
+
+    numClaves = max([len(c) for c in serieIndex.to_list()]) if esMultiInd else 1
+    nomClaves = list(serieIndex.names)
+    clave2i = dict(zip(nomClaves, range(numClaves)))
+
+    checkConds = [k < numClaves if isinstance(k, (int)) else (k in nomClaves) for k in indDict.keys()]
+
+    if not all(checkConds):
+        failedConds = [cond for cond, check in zip(indDict.items(), checkConds) if not check]
+        print(failedConds)
+        condsMsg = ",".join(map(lambda x: '"' + str(x) + '"', failedConds))
+        raise ValueError("filtraFilasSerie: condiciones incorrectas: %s" % condsMsg)
+
+    funcCheckMulti = lambda x: all([x[k if isinstance(k, int) else clave2i[k]] == v for k, v in indDict.items()])
+    funcCheckSingle = lambda x: (x == list(indDict.values())[0])
+
+    filassOk = [c for c in serieIndex.to_list() if (funcCheckMulti if esMultiInd else funcCheckSingle)(c)]
+
+    if not filassOk:
+        raise KeyError(
+            "filtraFilasSerie: ninguna fila cumple las condiciones (%s). Filas: %s " % (
+                str(indDict), serieIndex.to_list()))
+
+    result = serie[filassOk]
+    if not conv2ts:  # Don't want conversion, nothing else to do
+        return result
+
+    fechasOk = [c[0] for c in filassOk]
+    if len(set(fechasOk)) == len(filassOk):
+        tsFilas = pd.DatetimeIndex(fechasOk)
+        result.index = tsFilas
+        return result
+
+    return result
+
+
+def grabaDatosHistoricos(df, fname):
+    df.to_csv(fname, sep=';', header=True, index=True, quoting=csv.QUOTE_ALL)
+
+
+def indexFillNAs(indexdata: pd.MultiIndex, replacementValues: dict):
+    """
+    Reemplaza los NAs de niveles de índice por valores configurables por nivel.
+    :param indexdata: Indice a tratar
+    :param replacementValues: diccionario con "nivel":"valor de reemplazo"
+    :return:
+    """
+    newData = []
+    for name in indexdata.names:
+        dataLevel = indexdata.get_level_values(name).fillna(
+            replacementValues[name]) if name in replacementValues else indexdata.get_level_values(name)
+        newData.append(dataLevel)
+
+    result = pd.MultiIndex.from_arrays(newData, names=indexdata.names)
+
+    return result
+
+
+def indiceDeTipo(dfIndex: pd.MultiIndex, prefijo):
+    def getMatcher(prefijos):
+        def coincideCadena(c: str) -> bool:
+            return any([c.startswith(p) for p in prefijos])
+
+        return coincideCadena
+
+    nombresTipo = nombreTipoCamposIndice(dfIndex)
+
+    listaPrefs = listize(prefijo)
+
+    matcher = getMatcher(listaPrefs)
+
+    resultSerie = nombresTipo.apply(matcher)
+
+    result = resultSerie.loc[resultSerie].index.to_list()
+
+    return result
+
+
+def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
+    """
+    Lee un dataframe (en CSV) y le hace un tratamiento mínimo: fija columnas de índice, elmina columnas y convierte en fecha
+    :param fname_or_handle: nombre de fichero o handle para acceder al dataframe
+    :param colIndex: columnas que formarán el índice (nombre o lista)
+    :param cols2drop: columnas que se van a eliminar (lista)
+    :param colDates: columnas que se van a convertir en fechas (nombre de la columna, lista de nombres, diccionario con
+                     pares: nombre:formatoEsperado
+    :param kwargs: parámetros que se le pasan a pd.read_csv
+    :return: dataframe
+    """
+    myDF = pd.read_csv(fname_or_handle, **kwargs)
+
+    errors = []
+    columnasDispo = set(myDF.columns)
+    if set(colIndex or set()).difference(columnasDispo):
+        missingCols = set(colIndex).difference(columnasDispo)
+        errorMsg = f"Columnas para Indice. Falta(n) {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if set(cols2drop or set()).difference(columnasDispo):
+        missingCols = set(cols2drop).difference(columnasDispo)
+        errorMsg = f"Columnas para ignorar. Falta(n) {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if colDates2ReqColNames(colDates).difference(columnasDispo):
+        missingCols = colDates2ReqColNames(colDates).difference(columnasDispo)
+        errorMsg = f"Columnas para transformación a tiempo. Falta(n) {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if errors:
+        errorMsg = ', '.join(errors)
+        raise ValueError(f"leeCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
+
+    if colDates:
+        if isinstance(colDates, str):
+            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
+        elif isinstance(colDates, (list, set)):
+            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
+                             colDates}
+        elif isinstance(colDates, dict):
+            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
+                             colDates.items()}
         else:
-            dfNewlines[counterName] = 0
+            raise TypeError(
+                f"leeCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
 
-    return dfNewlines
+        for colName, args in conversorArgs.items():
+            myDF[colName] = pd.to_datetime(**args)
+
+    resultDropped = myDF.drop(columns=cols2drop) if cols2drop else myDF
+    resultIndex = resultDropped.set_index(colIndex) if colIndex else resultDropped
+
+    result = resultIndex
+
+    return result
 
 
-def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs):
-    statMsg = dict()
-    resultDF = dfNew
+def leeDatosHistoricos(fname, extraCols, colsIndex, colsDate, changeCounters):
+    requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
-    changeCounters = {} if changeCounters is None else changeCounters
+    try:
+        result = leeCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+    except ValueError as exc:
+        raise exc
 
-    for counterName, counterConf in changeCounters.items():
-        # Valores por defecto
-        funcionCuenta = cuentaFilasCambiadas
+    missingCols = set(requiredCols).difference(result.columns)
+    if missingCols:
+        raise ValueError(f"Archivo '{fname}': faltan columnas: {sorted(missingCols)}.")
 
-        if isinstance(counterConf, list):
-            kwargs['columnasObj'] = counterConf
-        elif isinstance(counterConf, FunctionType):
-            funcionCuenta = counterConf
-        elif isinstance(counterConf, dict):
-            kwargs.update(counterConf)
-            funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
+    return result
 
-        resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfOld, dfNew, **kwargs)
 
-        if isinstance(resultCuenta, dict):
-            for k in sorted(resultCuenta):
-                finalK = f"{counterName}.{k}"
-                valorK = resultCuenta[k]
-                statMsg[finalK] = valorK
-        else:
-            statMsg[counterName] = resultCuenta
-            if indiceCambiadas is not None:
-                resultDF[counterName] = dfOld[counterName] + indiceCambiadas
+def nombreTipoCamposIndice(dfIndex: pd.MultiIndex) -> pd.Series:
+    """
+    Dado un multiíndice devuelve los tipos de los campos que lo componen (cadena de texto)
+    :param dfIndex: multiíndice de dataframe
+    :return: Serie de cadenas con los tipos de cada campo del índice
+    """
+    result = dfIndex.to_frame(index=False).dtypes.map(str)
 
-    return resultDF, statMsg
+    return result
+
+
+def operaRespetandoNA(df, func):
+    """
+    Aplica una función a cada elemento de un dataframe si NO es na. Si lo es pone el resultado será NA
+
+    :param df: dataframe a tratar
+    :param func: función a aplicar en los elementos que no son NA
+    :return:
+    """
+    result = df.applymap(func=lambda x: np.nan if np.isnan(x) else func(x))
+
+    return result
+
+
+def ponMedidaPrefijo(col, sigColNanV=None, defaultNan=False):
+    colName = col.name
+
+    sigNan = defaultNan if sigColNanV is None else sigColNanV[colName]
+
+    primNonNan = col.reset_index(drop=True).first_valid_index()
+    primVal = col.iloc[primNonNan] if (primNonNan == 0 and not sigNan) else 0
+    result = col.shift(1)
+    result.iloc[primNonNan] = primVal
+
+    return result
+
+
+def primValorColumna(df):
+    return df.apply(lambda x: x[x.first_valid_index()])
+
+
+def reordenaColumnas(df, dfRef):
+    """
+    Devuelve un DF con las columnas ordenadas según las columnas de otro.
+
+    :param df:
+    :param dfRef:
+    :return:
+    """
+    return df[dfRef.columns]
+
+
+def ultValorColumna(df):
+    return df.apply(lambda x: x[x.last_valid_index()])
