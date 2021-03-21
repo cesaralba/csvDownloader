@@ -3,14 +3,15 @@ from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from os import path
-from time import time
 from types import FunctionType
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+from time import time
 
 from utils.misc import listize
+from utils.pandas import DF2maxValues
 from .GitIterator import fileFromCommit, GitIterator
 
 COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
@@ -154,7 +155,8 @@ def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, 
         return 0
 
     auxColsObj = listize(columnasObj)
-    counterCols = dfCambiadoOld.columns
+    counterCols = dfCambiadoNew.columns.difference(COLSADDEDMERGED)
+
     if columnasObj:
         missingColsNew = set(auxColsObj).difference(dfCambiadoNew.columns)
 
@@ -165,7 +167,8 @@ def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, 
             return None
         counterCols = auxColsObj
 
-    areRowsDifferent = (dfCambiadoOld[counterCols] != dfCambiadoNew[counterCols]).any(axis=1)
+    NAfiller = DF2maxValues(dfCambiadoOld, counterCols)
+    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[counterCols]).any(axis=1)
     return areRowsDifferent
 
 
@@ -198,9 +201,12 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
     removed, shared, added = compareDataFrameIndexes(new, old)
 
     if len(shared):
-        oldData = old[new.columns]
+        targetCols = new.columns.intersection(old.columns).difference(COLSADDEDMERGED)
+        oldData = old[targetCols]
 
-        areRowsDifferent = (oldData.loc[shared, :] != new.loc[shared, :]).any(axis=1)
+        NAfiller = DF2maxValues(old, targetCols)
+
+        areRowsDifferent = (oldData.fillna(value=NAfiller).loc[shared, targetCols] != new.fillna(value=NAfiller).loc[shared, targetCols]).any(axis=1)
         changed = areRowsDifferent.loc[areRowsDifferent].index
     else:
         changed = shared.take([])
@@ -243,7 +249,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Columnas adicionales (metadata del último cambio referido al repo que lo contiene)
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
-    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6}{contParciales}"
+    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
     fechaUltimaActualizacion = None
 
     if minDate:
@@ -267,12 +273,13 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
 
-        _, changed, added = compareDataFrames(newDF, DFcurrent)
+        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFcurrent)
         newDF['shaCommit'] = commitSHA
         newDF['fechaCommit'] = pd.to_datetime(commitDate)
 
-        if len(added):
-            newData = newDF.loc[added, :]
+        newData = pd.DataFrame()
+        if len(nuevas):
+            newData = newDF.loc[nuevas, :]
             newData['contCambios'] = 0
 
             newData = changeCounters2newColumns(dfNewlines=newData, changeCounters=changeCounters)
@@ -280,32 +287,31 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             if DFcurrent is None:
                 DFcurrent = newData
                 timeStop = time()
-                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed),
-                                        contParciales="", added=len(added)))
+                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
+                                        contParciales="", added=len(nuevas), removed=0))
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
-        if len(changed):
-            dfCambiadoOld = DFcurrent.loc[changed]
-            dfCambiadoNew = newDF.loc[changed]
+        if len(cambiadas):
+            dfCambiadoOld = DFcurrent.loc[cambiadas]
+            dfCambiadoNew = newDF.loc[cambiadas]
             dfCambiadoNew['contCambios'] = dfCambiadoOld['contCambios'] + 1
 
             restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
 
             newConStats, msgStats = changeCounters2changedDataStats(dfCambiadoOld, dfCambiadoNew, changeCounters,
                                                                     **restoArgs)
-            DFcurrent.loc[changed] = newConStats
+            DFcurrent.loc[cambiadas] = newConStats
             estadCambios.update(msgStats)
 
-        if len(added):
+        if len(nuevas):
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
         timeStop = time()
         strContParciales = ""
         if changeCounters:
             strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
-        print(
-            formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(changed), added=len(added),
-                              contParciales=strContParciales))
+        print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
+                                added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
 
     return DFcurrent
 
@@ -353,6 +359,42 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
     result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name='fechaCommit', freq=reqFreq)
 
     timeStop = time()
+    print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
+
+    return result
+
+
+def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: datetime = None, **kwargs):
+    timeStart = time()
+
+    result = dict()
+    fname = path.join(repoPath, filePath)
+    formatoLog = "DFVersionado2DFmerged: {fname} {dur:7.3f}s: "
+    fechaUltimaActualizacion = None
+
+    if minDate:
+        fechaUltimaActualizacion = minDate
+
+    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
+
+    for commit in repoIterator:
+        commitSHA = commit.hexsha
+        commitDate = commit.committed_datetime
+
+        handle = BytesIO(fileFromCommit(filePath, commit).read())
+
+        try:
+            newDF = readFunction(handle, **kwargs)
+            newDF['shaCommit'] = commitSHA
+            newDF['fechaCommit'] = pd.to_datetime(commitDate)
+        except ValueError as exc:
+            print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
+            raise exc
+
+        result[commitDate] = newDF
+
+    timeStop = time()
+
     print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
 
     return result
@@ -744,6 +786,3 @@ def reordenaColumnas(df, dfRef):
 
 def ultValorColumna(df):
     return df.apply(lambda x: x[x.last_valid_index()])
-
-
-COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
