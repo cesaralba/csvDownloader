@@ -13,6 +13,8 @@ from sklearn.preprocessing import StandardScaler
 from utils.misc import listize
 from .GitIterator import fileFromCommit, GitIterator
 
+COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
+
 
 def applyScaler(dfTS, year=2019, scalerCls=StandardScaler):
     scaler = scalerCls()
@@ -211,7 +213,7 @@ def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=
                                                         columnasObj=columnasObj)
 
     if (areRowsDifferent is None) or areRowsDifferent.empty:
-        print("cuentaFilasCambiadas EMPTY or None", columnasObj)
+        print(f"cuentaFilasCambiadas: {counterName}:{columnasObj} EMPTY or None", columnasObj)
         return 0, None
 
     return areRowsDifferent.sum(), areRowsDifferent
@@ -258,7 +260,12 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         estadCambios = defaultdict(int)
 
         handle = BytesIO(fileFromCommit(filePath, commit).read())
-        newDF = readFunction(handle, **kwargs)
+
+        try:
+            newDF = readFunction(handle, **kwargs)
+        except ValueError as exc:
+            print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
+            raise exc
 
         _, changed, added = compareDataFrames(newDF, DFcurrent)
         newDF['shaCommit'] = commitSHA
@@ -305,10 +312,12 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
 
 def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaObj, minDate: datetime = None, **kwargs):
     fname = path.join(repoPath, filePath)
-    formatoLog = "DFVersionado2TSofTS: {dur:7.3f}s: commitDate: {commitDate}"
+    formatoLog = "DFVersionado2TSofTS: {fname} {dur:7.3f}s"
     reqFreq = kwargs.get('freq', None)
     if 'freq' in kwargs:
         kwargs.pop('freq')
+
+    timeStart = time()
 
     fechaUltimaActualizacion = None
     if minDate:
@@ -626,6 +635,24 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
     """
     myDF = pd.read_csv(fname_or_handle, **kwargs)
 
+    errors = []
+    columnasDispo = set(myDF.columns)
+    if set(colIndex or set()).difference(columnasDispo):
+        missingCols = set(colIndex).difference(columnasDispo)
+        errorMsg = f"Columnas para Indice. Falta(n) {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if set(cols2drop or set()).difference(columnasDispo):
+        missingCols = set(cols2drop).difference(columnasDispo)
+        errorMsg = f"Columnas para ignorar. Falta(n) {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if colDates2ReqColNames(colDates).difference(columnasDispo):
+        missingCols = colDates2ReqColNames(colDates).difference(columnasDispo)
+        errorMsg = f"Columnas para transformación a tiempo. Falta(n) {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if errors:
+        errorMsg = ', '.join(errors)
+        raise ValueError(f"leeCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
+
     if colDates:
         if isinstance(colDates, str):
             conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
@@ -653,10 +680,15 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
 def leeDatosHistoricos(fname, extraCols, colsIndex, colsDate, changeCounters):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
-    result = leeCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+    try:
+        result = leeCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+    except ValueError as exc:
+        raise exc
+
     missingCols = set(requiredCols).difference(result.columns)
     if missingCols:
         raise ValueError(f"Archivo '{fname}': faltan columnas: {sorted(missingCols)}.")
+
     return result
 
 
