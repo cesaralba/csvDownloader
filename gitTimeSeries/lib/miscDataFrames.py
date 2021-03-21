@@ -328,7 +328,6 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
     auxDict = dict()
 
     for commit in repoIterator:
-        timeStart = time()
         commitSHA = commit.hexsha
         commitDate = commit.committed_datetime
 
@@ -354,8 +353,7 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
     result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name='fechaCommit', freq=reqFreq)
 
     timeStop = time()
-    strContParciales = ""
-    print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate))
+    print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
 
     return result
 
