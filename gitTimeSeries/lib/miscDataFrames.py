@@ -125,6 +125,26 @@ def changeCounters2ReqColNames(changeCounters: dict = None):
     return result
 
 
+def colDates2ReqColNames(colDates=None):
+    """
+    Devuelve la lista de columnas que se van a convertir en fecha
+    :param colDates:
+    :return:
+    """
+    result = set()
+    if colDates:
+        if isinstance(colDates, str):
+            result = {colDates}
+        elif isinstance(colDates, (list, set)):
+            result = set(colDates)
+        elif isinstance(colDates, dict):
+            result = set(colDates.keys())
+        else:
+            raise TypeError(
+                f"colDates2ReqColNames: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+    return result
+
+
 def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
     if len(dfCambiadoOld) != len(dfCambiadoNew):
         raise ValueError(f"cuentaFilas: longitudes difieren Old:{len(dfCambiadoOld)} != New:{len(dfCambiadoNew)}")
