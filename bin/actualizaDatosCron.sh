@@ -28,7 +28,7 @@ TODAY=$(date '+%Y%m%d%H%M')
 
 [ -d ${GTS_CODEDIR} ] && rm -rf ${GTS_CODEDIR}
 mkdir -p ${GTS_CODEDIR}
-git clone -q --branch master ${GTS_REPO} ${GTS_CODEDIR}
+git clone -q --branch master ${GTS_REPO} ${GTS_CODEDIR}  || adiosMundoCruel "Problemas descargando ${GTS_REPO}"
 
 NEWMD5=$(md5sum ${GTS_CODEDIR}/bin/actualizaDatosCron.sh | cut -d' ' -f1)
 
