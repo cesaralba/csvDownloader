@@ -11,7 +11,6 @@ function soLong() {
 if [ "x$1" != "x" ]; then
   ENVFILE=$1
   [ -f "${ENVFILE}" ] || soLong "Fichero con entorno '${ENVFILE}' no existe"
-
   source ${ENVFILE}
 fi
 
