@@ -1,6 +1,6 @@
 #!/bin/bash
 
-function adiosMundoCruel {
+function soLong {
   MSG=${1:-No msg}
   echo ${MSG}
   exit 1
@@ -9,22 +9,21 @@ function adiosMundoCruel {
 
 if [ "x$1" = "x" ]
 then
-  adiosMundoCruel "No se ha especificado parametro con variables de entorno"
+  echo "No se ha especificado parametro con variables de entorno. Trataré de tirar sin él"
 else
   ENVFILE=$1
+  [ -f "${ENVFILE}" ] || soLong "Fichero con entorno '${ENVFILE}' no existe"
+  source ${ENVFILE}
 fi
 
-[ -f "${ENVFILE}" ] || adiosMundoCruel "Fichero con entorno '${ENVFILE}' no existe"
 
-source ${ENVFILE}
-
-[ -n "${DATADIR}" ] || adiosMundoCruel "No se ha especificado la variable DATADIR"
+[ -n "${DATADIR}" ] || soLong "No se ha especificado la variable DATADIR"
 
 GITDIR="${DATADIR}/.git"
 
-[ -d ${DATADIR} ] || mkdir -p ${DATADIR} || adiosMundoCruel "Problemas creando ${DATADIR}. Bye"
+[ -d ${DATADIR} ] || mkdir -p ${DATADIR} || soLong "Problemas creando ${DATADIR}. Bye"
 
-[ -d ${GITDIR} ] || git init ${DATADIR} || adiosMundoCruel "Problemas creando repo en ${DATADIR}. Bye"
+[ -d ${GITDIR} ] || git init ${DATADIR} || soLong "Problemas creando repo en ${DATADIR}. Bye"
 
 cat <<FIN
 
@@ -40,7 +39,7 @@ No obstante, el procedimiento es:
   git remote add origin URLGITHUB
 
 
-Tenga en cuenta que el programa de descarga está pensado para no ser interactivo. Eso también tendrá que 
+Tenga en cuenta que el programa de descarga está pensado para no ser interactivo. Eso también tendrá que
 arreglarlo.
 
 FIN
