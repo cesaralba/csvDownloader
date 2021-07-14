@@ -14,30 +14,69 @@ if [ "x$1" != "x" ]; then
   source ${ENVFILE}
 fi
 
-[ -n "${DATADIR}" ] || soLong "No se ha especificado la variable DATADIR"
-[ -n "${WRKDIR}" ] || soLong "No se ha especificado la variable WRKDIR"
-[ -n "${NEWFILE}" ] || soLong "No se ha especificado la variable NEWFILE"
-[ -n "${DATAFILE}" ] || soLong "No se ha especificado la variable DATAFILE"
-[ -n "${URLFILE}" ] || [ -n "${SRCFILE}" ] || soLong "Se necesita especificar o la variable URLFILE o la variable SRCFILE"
+#Parameters sanity check
+[ -n "${DATADIR}" ] || soLong "Variable DATADIR not set"
+[ -n "${WRKDIR}" ] || soLong "Variable WRKDIR not set"
+[ -n "${NEWFILE}" ] || soLong "Variable NEWFILE not set"
+[ -n "${DATAFILE}" ] || soLong "Variable DATAFILE not set"
+[ -n "${URLFILE}" ] || [ -n "${SRCFILE}" ] || soLong "Either variable URLFILE or SRCFILE must be set"
 
 BRANCHDEF=${REMOTEBRANCH:-master}
 NAMEDEF=${REMOTENAME:-origin}
 
 DOCOMMIT=0
 
-[ -d ${WRKDIR} ] || mkdir -p ${WRKDIR} || soLong "Problemas creando ${WRKDIR}. Bye"
+#Create destination repo if it doesn't exist
+[ -d "${DATADIR}" ] || mkdir -p ${DATADIR} || soLong "Problems creating ${DATADIR}. Bye"
 
-[ -f ${NEWFILE} ] || rm -f ${NEWFILE} || soLong "Problemas borrando ${NEWFILE}. Bye"
+GITDIR="${DATADIR}/.git"
 
-if [ -n "${URLFILE}" ]; then
-  MSG="Fecha:${DATE} fuente ${URLFILE}"
-  wget -q -O ${NEWFILE} ${URLFILE} || soLong "Problemas descargando ${URLFILE}. Bye"
-else
-  MSG="Fecha:${DATE} fuente ${SRCFILE}"
-  cp -f ${SRCFILE} ${NEWFILE} || soLong "Problemas copiando ${SRCFILE}. Bye"
+if [ ! -d ${GITDIR} ]
+then
+  # Clone remote or create from blank
+  if [ -n "${REMOTE}" ]
+  then
+    echo "Remote: -> ${REMOTE}"
+    git clone ${REMOTE} ${DATADIR}  || soLong "Problemas clonando ${REMOTE}. Bye"
+  else
+    git init -b ${BRANCHDEF} ${DATADIR} || soLong "Problemas creando repo en ${DATADIR}. Bye"
+
+    if [ -n "${REMOTEGITUTL}" ]
+    then
+      (
+        cd ${DATADIR}  || soLong "Problemas cambiando a ${DATADIR}. Bye"
+        git remote add ${NAMEDEF} ${REMOTEGITUTL}
+      ) || soLong "Problems creating remote '${NAMEDEF}' -> '${REMOTEGITUTL}'"
+    fi
+  fi
+  # Config user and email
+  (
+    cd ${DATADIR}  || soLong "Problemas cambiando a ${DATADIR}. Bye"
+    git config user.email "$(whoami)"
+    git config user.name "my@email"
+  )
 fi
 
+
+#Preparing work area
+[ -d ${WRKDIR} ] || mkdir -p ${WRKDIR} || soLong "Problems creating ${WRKDIR}. Bye"
+[ -f ${NEWFILE} ] || rm -f ${NEWFILE} || soLong "Problems creating ${NEWFILE}. Bye"
+
+if [ -n "${URLFILE}" ]; then
+  MSG="Date:${DATE} source ${URLFILE}"
+  wget -q -O ${NEWFILE} ${URLFILE} || soLong "Problems downloading ${URLFILE}. Bye"
+else
+  MSG="Date:${DATE} source ${SRCFILE}"
+  cp -f ${SRCFILE} ${NEWFILE} || soLong "Problems copying ${SRCFILE}. Bye"
+fi
+
+
+ABSDATADIR=$(readlink -e ${DATADIR})
+
 if [ -f ${DATAFILE} ]; then
+  ABSDATAFILE=$(readlink -e ${DATAFILE})
+  RELDATAFILE=${ABSDATAFILE#${ABSDATADIR}/}
+
   diff -q ${NEWFILE} ${DATAFILE}
   RES=$?
   if [ ${RES} != 0 ]; then
@@ -50,16 +89,18 @@ if [ -f ${DATAFILE} ]; then
     )
     (
       cd $DATADIR
-      git add ${DATAFILE} || soLong "No puedo añadir ${DATAFILE} a repo. Bye"
-    )
+    git add ${RELDATAFILE} || soLong "Can't add ${ABSDATAFILE} to repo. Bye"
+    )  || soLong "Problems on add. Bye"
     DOCOMMIT=1
   fi
 else
   cp ${NEWFILE} ${DATAFILE} || soLong "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
+  ABSDATAFILE=$(readlink -e ${DATAFILE})
+  RELDATAFILE=${ABSDATAFILE#${ABSDATADIR}/}
   (
     cd $DATADIR
-    git add ${DATAFILE} || soLong "No puedo añadir ${DATAFILE} a repo. Bye"
-  )
+    git add ${RELDATAFILE} || soLong "Can't add ${ABSDATAFILE} to repo. Bye"
+  ) || soLong "Problems on add. Bye"
   DOCOMMIT=1
 fi
 
@@ -70,20 +111,29 @@ PREVCOMMIT=$(
 if [ ${DOCOMMIT} != 0 ]; then
   (
     cd $DATADIR
-    git commit -q ${DATAFILE} -m "${MSG}" || soLong "No puedo añadir ${DATAFILE} a repo. Bye"
-  )
+    git commit -q ${RELDATAFILE} -m "${MSG}" || soLong "Can't commit ${ABSDATAFILE}. Bye"
+  ) || soLong "Problems on commit. Bye"
 
-  (
-    cd $DATADIR
-    git remote | grep -q ${NAMEDEF}
-  )
-  RES=$?
-  if [ $RES = 0 ]; then
+  if [ -n "${REMOTEGITUTL}" ]; then
     (
       cd $DATADIR
-      git push -q ${NAMEDEF} ${BRANCHDEF} || soLong "No puedo hacer push a remoto ${NAMEDEF}-> ($(git remote -v | grep ${NAMEDEF}). Bye"
+      git remote | grep -q ${REMOTEGITUTL}
     )
+    RES=$?
+    if [ $RES != 0 ]; then
+      (
+        cd ${DATADIR}  || soLong "Problemas cambiando a ${DATADIR}. Bye"
+        git remote add ${NAMEDEF} ${REMOTEGITUTL}
+      ) || soLong "Problems creating remote '${NAMEDEF}' -> '${REMOTEGITUTL}'"
+    fi
+    (
+      cd $DATADIR
+      NAMEFROMREMOTE=$(git remote -v | grep ${REMOTEGITUTL} | cut -f1  | sort | uniq)
+      git push -q ${NAMEFROMREMOTE} ${BRANCHDEF} || soLong "No puedo hacer push a remoto ${NAMEFROMREMOTE}-> ($(git remote -v | grep ${REMOTEGITUTL}). Bye"
+    ) || soLong "Problems pushing to remote '${REMOTEGITUTL}'"
   fi
+
+
 fi
 CURRCOMMIT=$(
   cd $DATADIR
