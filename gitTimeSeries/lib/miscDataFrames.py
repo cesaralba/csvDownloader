@@ -414,7 +414,7 @@ def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
         print(f"estadisticaCategoricals: {counterName}: no ha habido cambios {colData}")
         return {}, None
 
-    columnasIndice = dfCambiadoOld.index.names
+    columnasIndice = list(dfCambiadoOld.index.names)
     if columnaIndiceObj not in columnasIndice:
         print(
             f"estadisticaCategoricals: {counterName}: columna indice desconocida: {columnaIndiceObj}. ",
@@ -454,7 +454,7 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
         print(f"estadisticaFechaCambios: {counterName}: no ha habido cambios {colData}")
         return {}, None
 
-    columnasIndice = dfCambiadoOld.index.names
+    columnasIndice = list(dfCambiadoOld.index.names)
     if columnaIndiceObj not in columnasIndice:
         print(
             f"estadisticaFechaCambios: {counterName}: columna indice desconocida: {columnaIndiceObj}. ",
