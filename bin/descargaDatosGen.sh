@@ -140,8 +140,8 @@ CURRCOMMIT=$(
 
 if [ "${PREVCOMMIT}" != "${CURRCOMMIT}" ]; then
   if [ "x${FOLLOWUPSCRIPT}" != "x" ]; then
-    [ -e ${FOLLOWUPSCRIPT} ] || soLong "Script de continuación ${FOLLOWUPSCRIPT} no existe"
-    [ -x ${FOLLOWUPSCRIPT} ] || soLong "Script de continuación ${FOLLOWUPSCRIPT} no ejecutable"
+    [ -e ${FOLLOWUPSCRIPT} ] || soLong "Follow-up script ${FOLLOWUPSCRIPT} does not exist"
+    [ -x ${FOLLOWUPSCRIPT} ] || soLong "Follow-up script ${FOLLOWUPSCRIPT} can not be executed"
     ${FOLLOWUPSCRIPT} ${ENVFILE}
   fi
 fi
