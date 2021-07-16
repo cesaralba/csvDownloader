@@ -92,7 +92,7 @@ Host gogs
 ~~~
 * Environment variable
 ~~~shell
-ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /run/secrets/user_ssh_key
+export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i MySSHkeyfile"
 ~~~
 
 
