@@ -10,7 +10,7 @@ function soLong() {
 
 if [ "x$1" != "x" ]; then
   ENVFILE=$1
-  [ -f "${ENVFILE}" ] || soLong "Fichero con entorno '${ENVFILE}' no existe"
+  [ -f "${ENVFILE}" ] || soLong "Provided filename '${ENVFILE}' with env variable settings does not exist"
   source ${ENVFILE}
 fi
 
@@ -34,27 +34,25 @@ GITDIR="${DATADIR}/.git"
 if [ ! -d ${GITDIR} ]
 then
   # Clone remote or create from blank
-  if [ -n "${REMOTE}" ]
+  if [ -n "${REMOTEGITURL}" ]
   then
-    echo "Remote: -> ${REMOTE}"
-    git clone ${REMOTE} ${DATADIR}  || soLong "Problemas clonando ${REMOTE}. Bye"
-  else
-    git init -b ${BRANCHDEF} ${DATADIR} || soLong "Problemas creando repo en ${DATADIR}. Bye"
+    echo "Remote: -> ${REMOTEGITURL}"
+    git clone ${REMOTEGITURL} ${DATADIR}  || soLong "Problems cloning ${REMOTEGITURL}. Bye"
+    (         #-b
+      cd ${DATADIR}  || soLong "Problemas changing to ${DATADIR}. Bye"
+      git checkout ${BRANCHDEF} || git checkout -b ${BRANCHDEF} || soLong "Problems creating/switching to ${BRANCHDEF}. Bye"
+    ) || soLong "Problems cloning repo (${DATADIR})"
 
-    if [ -n "${REMOTEGITUTL}" ]
-    then
-      (
-        cd ${DATADIR}  || soLong "Problemas cambiando a ${DATADIR}. Bye"
-        git remote add ${NAMEDEF} ${REMOTEGITUTL}
-      ) || soLong "Problems creating remote '${NAMEDEF}' -> '${REMOTEGITUTL}'"
-    fi
+  else
+    git init -b ${BRANCHDEF} ${DATADIR} || soLong "Problems creating repo in ${DATADIR}. Bye"
   fi
+
   # Config user and email
   (
-    cd ${DATADIR}  || soLong "Problemas cambiando a ${DATADIR}. Bye"
-    git config user.email "$(whoami)"
-    git config user.name "my@email"
-  )
+    cd ${DATADIR}  || soLong "Problemas changing to ${DATADIR}. Bye"
+    git config user.name "${USERNAME:-$(whoami)}" || soLong "Problems configuring user.name . Bye"
+    git config user.email "${USERMAIL:-"my@email"}" || soLong "Problems configuring user.mail . Bye"
+  ) || soLong "Problems configuring user data (${DATADIR})"
 fi
 
 
@@ -80,8 +78,8 @@ if [ -f ${DATAFILE} ]; then
   diff -q ${NEWFILE} ${DATAFILE}
   RES=$?
   if [ ${RES} != 0 ]; then
-    echo "Descarga: ${MSG}"
-    cp ${NEWFILE} ${DATAFILE} || soLong "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
+    echo "Download: ${MSG}"
+    cp ${NEWFILE} ${DATAFILE} || soLong "Problems copying ${NEWFILE} to ${DATAFILE}. Bye"
 
     (
       cd $DATADIR
@@ -90,17 +88,17 @@ if [ -f ${DATAFILE} ]; then
     (
       cd $DATADIR
     git add ${RELDATAFILE} || soLong "Can't add ${ABSDATAFILE} to repo. Bye"
-    )  || soLong "Problems on add. Bye"
+    )  || soLong "Problems on add. Bye (${DATADIR})"
     DOCOMMIT=1
   fi
 else
-  cp ${NEWFILE} ${DATAFILE} || soLong "Problemas copiando de ${NEWFILE} a  ${DATAFILE}. Bye"
+  cp ${NEWFILE} ${DATAFILE} || soLong "Problems copying ${NEWFILE} to ${DATAFILE}. Bye"
   ABSDATAFILE=$(readlink -e ${DATAFILE})
   RELDATAFILE=${ABSDATAFILE#${ABSDATADIR}/}
   (
     cd $DATADIR
     git add ${RELDATAFILE} || soLong "Can't add ${ABSDATAFILE} to repo. Bye"
-  ) || soLong "Problems on add. Bye"
+  ) || soLong "Problems on add. Bye (${DATADIR})"
   DOCOMMIT=1
 fi
 
@@ -112,25 +110,25 @@ if [ ${DOCOMMIT} != 0 ]; then
   (
     cd $DATADIR
     git commit -q ${RELDATAFILE} -m "${MSG}" || soLong "Can't commit ${ABSDATAFILE}. Bye"
-  ) || soLong "Problems on commit. Bye"
+  ) || soLong "Problems on commit. Bye (${DATADIR})"
 
-  if [ -n "${REMOTEGITUTL}" ]; then
+  if [ -n "${REMOTEGITURL}" ]; then
     (
       cd $DATADIR
-      git remote | grep -q ${REMOTEGITUTL}
+      git remote -v | grep -q ${REMOTEGITURL}
     )
     RES=$?
     if [ $RES != 0 ]; then
       (
-        cd ${DATADIR}  || soLong "Problemas cambiando a ${DATADIR}. Bye"
-        git remote add ${NAMEDEF} ${REMOTEGITUTL}
-      ) || soLong "Problems creating remote '${NAMEDEF}' -> '${REMOTEGITUTL}'"
+        cd ${DATADIR}  || soLong "Problemas changing to ${DATADIR}. Bye"
+        git remote add ${NAMEDEF} ${REMOTEGITURL} || soLong "Can't create remote ${NAMEDEF} -> ${REMOTEGITURL}. Bye"
+      ) || soLong "Problems creating remote '${NAMEDEF}' -> '${REMOTEGITURL}' (${DATADIR})"
     fi
     (
       cd $DATADIR
-      NAMEFROMREMOTE=$(git remote -v | grep ${REMOTEGITUTL} | cut -f1  | sort | uniq)
-      git push -q ${NAMEFROMREMOTE} ${BRANCHDEF} || soLong "No puedo hacer push a remoto ${NAMEFROMREMOTE}-> ($(git remote -v | grep ${REMOTEGITUTL}). Bye"
-    ) || soLong "Problems pushing to remote '${REMOTEGITUTL}'"
+      NAMEFROMREMOTE=$(git remote -v | grep ${REMOTEGITURL} | cut -f1  | sort | uniq)
+      git push --set-upstream -q ${NAMEFROMREMOTE} ${BRANCHDEF} || soLong "Can't push to remote ${NAMEFROMREMOTE}-> ($(git remote -v | grep ${REMOTEGITURL}). Bye"
+    ) || soLong "Problems pushing to remote '${REMOTEGITURL}' (${DATADIR})"
   fi
 
 
