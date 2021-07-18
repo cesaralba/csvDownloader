@@ -279,11 +279,6 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
 
     repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
 
-    # Just one commit means that either it is the first one (DFcurrent would be None)
-    # or there is just the last one processed (DFcurrent would not be None)
-    if len(repoIterator) == 1 and DFcurrent is not None:
-        return DFcurrent
-
     prevDF = None
     for commit in repoIterator:
         timeStart = time()
@@ -299,10 +294,11 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
 
-        # Check if the first DF we are using has already been processed
+        # Check if the first DF we are using has already been processed. If so set it as the reference to compare
+        # and take next. We assume there can only be a commit at a certain time
         if (prevDF is None) and (DFcurrent is not None) and (commitDate == maxCommitDateCurrent):
             prevDF = newDF
-            continue
+            continue  # Nothing to do but we have the reference for
 
         newDFwrk = newDF.copy()
 
@@ -312,21 +308,6 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         newDFwrk['fechaCommit'] = pd.to_datetime(commitDate)
 
         newData = pd.DataFrame()
-        if len(nuevas):
-            auxNewData = newDFwrk.loc[nuevas, :]
-            auxNewData['contCambios'] = 0
-
-            counterDF = changeCounters2resultDF(data=auxNewData.index, changeCounters=changeCounters)
-            newData = pd.concat([auxNewData, counterDF], axis=1, join='outer')
-
-            if DFcurrent is None:
-                DFcurrent = newData
-                timeStop = time()
-                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
-                                        contParciales="", added=len(nuevas), removed=0))
-                prevDF = newDF
-                continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
-
         if len(cambiadas):
             dfCurrentChanged = DFcurrent.loc[cambiadas]
             dfPrevChanged = prevDF.loc[cambiadas]
@@ -347,12 +328,24 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             estadCambios.update(msgStatsCurr)
 
         if len(nuevas):
+            auxNewData = newDFwrk.loc[nuevas, :]
+            auxNewData['contCambios'] = 0
+
+            counterDF = changeCounters2resultDF(data=auxNewData.index, changeCounters=changeCounters)
+            newData = pd.concat([auxNewData, counterDF], axis=1, join='outer')
+
+            if DFcurrent is None:
+                DFcurrent = newData
+                timeStop = time()
+                print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
+                                        contParciales="", added=len(nuevas), removed=len(eliminadas)))
+                prevDF = newDF
+                continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
+
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
         timeStop = time()
-        strContParciales = ""
-        if changeCounters:
-            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
+        strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
         print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                 added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
         prevDF = newDF
