@@ -728,7 +728,7 @@ def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None
             f"readCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
 
     if colDates:
-        conversorArgs = prepare_columns_date_conversion(colDates, myDF)
+        conversorArgs = readCSV_prepare_date_conversion(colDates, myDF)
 
         for colName, args in conversorArgs.items():
             myDF[colName] = pd.to_datetime(**args)
@@ -758,7 +758,7 @@ def readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo):
     return errors
 
 
-def prepare_columns_date_conversion(colDates, myDF):
+def readCSV_prepare_date_conversion(colDates, myDF):
     if isinstance(colDates, str):
         conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
     elif isinstance(colDates, (list, set)):
