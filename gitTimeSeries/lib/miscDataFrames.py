@@ -10,9 +10,9 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from time import time
 
+from utils.GitIterator import fileFromCommit, GitIterator
 from utils.misc import listize
 from utils.pandas import DF2maxValues
-from utils.GitIterator import fileFromCommit, GitIterator
 
 COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
 
@@ -57,9 +57,10 @@ def cambiosDelDiaGrupo(df):
 
 def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs):
     statMsg = dict()
-    resultDF = dfNew
 
     changeCounters = {} if changeCounters is None else changeCounters
+
+    resultCounters = changeCounters2resultDF(data=dfNew.index, changeCounters=changeCounters)
 
     for counterName, counterConf in changeCounters.items():
         # Valores por defecto
@@ -83,23 +84,44 @@ def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs)
         else:
             statMsg[counterName] = resultCuenta
             if indiceCambiadas is not None:
-                resultDF[counterName] = dfOld[counterName] + indiceCambiadas
+                resultCounters[counterName] = indiceCambiadas
 
-    return resultDF, statMsg
+    return resultCounters, statMsg
 
 
-def changeCounters2newColumns(dfNewlines, changeCounters=None):
+def changeCounters2resultColumns(changeCounters=None):
     changeCounters = {} if changeCounters is None else changeCounters
+
+    result = []
 
     for counterName, counterConf in changeCounters.items():
         if isinstance(counterConf, dict):
             if counterConf.get('creaColumna', False):
                 nombreColumna = counterConf.get('nombreColumna', counterName)
-                dfNewlines[nombreColumna] = 0
+                result.append(nombreColumna)
         else:
-            dfNewlines[counterName] = 0
+            result.append(counterName)
 
-    return dfNewlines
+    return result
+
+
+def changeCounters2resultDF(data, changeCounters=None):
+    changeCounters = {} if changeCounters is None else changeCounters
+
+    if isinstance(data, (pd.DataFrame, pd.Series)):
+        auxIndex = data.index
+    elif isinstance(data, (pd.Index, pd.MultiIndex, pd.DatetimeIndex, pd.RangeIndex)):
+        auxIndex = data
+    else:
+        raise TypeError(
+            f"changeCounters2resultDF: don't know how to handle '{type(data)}': expected a DataFrame, a Series or some kind of index")
+
+    result = pd.DataFrame([], index=auxIndex)
+
+    for colname in changeCounters2resultColumns(changeCounters):
+        result[colname] = 0
+
+    return result
 
 
 def changeCounters2ReqColNames(changeCounters: dict = None):
@@ -115,15 +137,13 @@ def changeCounters2ReqColNames(changeCounters: dict = None):
     result = []
     for counterName, counterConf in changeCounters.items():
         if isinstance(counterConf, dict):
-            if counterConf.get('creaColumna', False):
-                nombreColumna = counterConf.get('nombreColumna', counterName)
-                result.append(nombreColumna)
             if 'columnasObj' in counterConf:
                 columnasAmirar = listize(counterConf['columnasObj'])
                 result.extend(columnasAmirar)
         elif isinstance(counterConf, list):
-            result.append(counterName)
             result.extend(counterConf)
+
+    result = result + changeCounters2resultColumns(changeCounters)
 
     return result
 
@@ -168,7 +188,9 @@ def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, 
         counterCols = auxColsObj
 
     NAfiller = DF2maxValues(dfCambiadoOld, counterCols)
-    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[counterCols]).any(axis=1)
+
+    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[
+        counterCols]).any(axis=1)
     return areRowsDifferent
 
 
@@ -206,7 +228,8 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
 
         NAfiller = DF2maxValues(old, targetCols)
 
-        areRowsDifferent = (oldData.fillna(value=NAfiller).loc[shared, targetCols] != new.fillna(value=NAfiller).loc[shared, targetCols]).any(axis=1)
+        areRowsDifferent = (oldData.fillna(value=NAfiller).loc[shared, targetCols] != new.fillna(value=NAfiller).loc[
+            shared, targetCols]).any(axis=1)
         changed = areRowsDifferent.loc[areRowsDifferent].index
     else:
         changed = shared.take([])
@@ -250,15 +273,18 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
     formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
-    fechaUltimaActualizacion = None
 
-    if minDate:
-        fechaUltimaActualizacion = minDate
-    elif DFcurrent is not None:  # Hecha la comprobación de is not None porque pandas se queja
-        fechaUltimaActualizacion = DFcurrent['fechaCommit'].max()
+    maxCommitDateCurrent = DFcurrent['fechaCommit'].max() if DFcurrent is not None else None
+    lastUpdateDate = minDate if minDate else maxCommitDateCurrent
 
-    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
+    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
 
+    # Just one commit means that either it is the first one (DFcurrent would be None)
+    # or there is just the last one processed (DFcurrent would not be None)
+    if len(repoIterator) == 1 and DFcurrent is not None:
+        return DFcurrent
+
+    prevDF = None
     for commit in repoIterator:
         timeStart = time()
         commitSHA = commit.hexsha
@@ -273,35 +299,52 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
 
-        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFcurrent)
-        newDF['shaCommit'] = commitSHA
-        newDF['fechaCommit'] = pd.to_datetime(commitDate)
+        # Check if the first DF we are using has already been processed
+        if (prevDF is None) and (DFcurrent is not None) and (commitDate == maxCommitDateCurrent):
+            prevDF = newDF
+            continue
+
+        newDFwrk = newDF.copy()
+
+        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, prevDF)
+
+        newDFwrk['shaCommit'] = commitSHA
+        newDFwrk['fechaCommit'] = pd.to_datetime(commitDate)
 
         newData = pd.DataFrame()
         if len(nuevas):
-            newData = newDF.loc[nuevas, :]
-            newData['contCambios'] = 0
+            auxNewData = newDFwrk.loc[nuevas, :]
+            auxNewData['contCambios'] = 0
 
-            newData = changeCounters2newColumns(dfNewlines=newData, changeCounters=changeCounters)
+            counterDF = changeCounters2resultDF(data=auxNewData.index, changeCounters=changeCounters)
+            newData = pd.concat([auxNewData, counterDF], axis=1, join='outer')
 
             if DFcurrent is None:
                 DFcurrent = newData
                 timeStop = time()
                 print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                         contParciales="", added=len(nuevas), removed=0))
+                prevDF = newDF
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
         if len(cambiadas):
-            dfCambiadoOld = DFcurrent.loc[cambiadas]
-            dfCambiadoNew = newDF.loc[cambiadas]
-            dfCambiadoNew['contCambios'] = dfCambiadoOld['contCambios'] + 1
+            dfCurrentChanged = DFcurrent.loc[cambiadas]
+            dfPrevChanged = prevDF.loc[cambiadas]
+            dfNewChanged = newDF.loc[cambiadas]
+            dfNewChangedWrk = newDFwrk.loc[cambiadas]
+
+            dfNewChangedWrk['contCambios'] = dfCurrentChanged['contCambios'] + 1
 
             restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
 
-            newConStats, msgStats = changeCounters2changedDataStats(dfCambiadoOld, dfCambiadoNew, changeCounters,
-                                                                    **restoArgs)
-            DFcurrent.loc[cambiadas] = newConStats
-            estadCambios.update(msgStats)
+            dfCountCambiosCurr, msgStatsCurr = changeCounters2changedDataStats(dfPrevChanged, dfNewChanged,
+                                                                               changeCounters, **restoArgs)
+
+            newConStats = dfCurrentChanged[dfCountCambiosCurr.columns] + dfCountCambiosCurr
+
+            dfChangedData = pd.concat([dfNewChangedWrk, newConStats], axis=1)
+            DFcurrent.loc[cambiadas] = dfChangedData
+            estadCambios.update(msgStatsCurr)
 
         if len(nuevas):
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
@@ -312,6 +355,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
         print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                 added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
+        prevDF = newDF
 
     return DFcurrent
 
