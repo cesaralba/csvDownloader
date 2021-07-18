@@ -706,7 +706,7 @@ def indiceDeTipo(dfIndex: pd.MultiIndex, prefijo):
     return result
 
 
-def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
+def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
     """
     Lee un dataframe (en CSV) y le hace un tratamiento mínimo: fija columnas de índice, elmina columnas y convierte en fecha
     :param fname_or_handle: nombre de fichero o handle para acceder al dataframe
@@ -719,41 +719,21 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
     """
     myDF = pd.read_csv(fname_or_handle, **kwargs)
 
-    errors = []
     columnasDispo = set(myDF.columns)
-    if set(colIndex or set()).difference(columnasDispo):
-        missingCols = set(colIndex).difference(columnasDispo)
-        errorMsg = f"Columnas para Indice. Falta(n) {sorted(missingCols)}"
-        errors.append(errorMsg)
-    if set(cols2drop or set()).difference(columnasDispo):
-        missingCols = set(cols2drop).difference(columnasDispo)
-        errorMsg = f"Columnas para ignorar. Falta(n) {sorted(missingCols)}"
-        errors.append(errorMsg)
-    if colDates2ReqColNames(colDates).difference(columnasDispo):
-        missingCols = colDates2ReqColNames(colDates).difference(columnasDispo)
-        errorMsg = f"Columnas para transformación a tiempo. Falta(n) {sorted(missingCols)}"
-        errors.append(errorMsg)
-    if errors:
-        errorMsg = ', '.join(errors)
-        raise ValueError(f"leeCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
+
+    columnProblems = readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo)
+    if columnProblems:
+        errorMsg = ', '.join(columnProblems)
+        raise ValueError(
+            f"readCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
 
     if colDates:
-        if isinstance(colDates, str):
-            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
-        elif isinstance(colDates, (list, set)):
-            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
-                             colDates}
-        elif isinstance(colDates, dict):
-            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
-                             colDates.items()}
-        else:
-            raise TypeError(
-                f"leeCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+        conversorArgs = prepare_columns_date_conversion(colDates, myDF)
 
         for colName, args in conversorArgs.items():
             myDF[colName] = pd.to_datetime(**args)
 
-    resultDropped = myDF.drop(columns=cols2drop) if cols2drop else myDF
+    resultDropped = myDF.drop(columns=(cols2drop or []))
     resultIndex = resultDropped.set_index(colIndex) if colIndex else resultDropped
 
     result = resultIndex
@@ -761,11 +741,43 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
     return result
 
 
+def readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo):
+    errors = []
+    if set(colIndex or set()).difference(columnasDispo):
+        missingCols = set(colIndex).difference(columnasDispo)
+        errorMsg = f"Columns for Index. Missing: {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if set(cols2drop or set()).difference(columnasDispo):
+        missingCols = set(cols2drop).difference(columnasDispo)
+        errorMsg = f"Columns to ignore. Missing: {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if colDates2ReqColNames(colDates).difference(columnasDispo):
+        missingCols = colDates2ReqColNames(colDates).difference(columnasDispo)
+        errorMsg = f"Columns to transform into time. Missing: {sorted(missingCols)}"
+        errors.append(errorMsg)
+    return errors
+
+
+def prepare_columns_date_conversion(colDates, myDF):
+    if isinstance(colDates, str):
+        conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
+    elif isinstance(colDates, (list, set)):
+        conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
+                         colDates}
+    elif isinstance(colDates, dict):
+        conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
+                         colDates.items()}
+    else:
+        raise TypeError(
+            f"readCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+    return conversorArgs
+
+
 def leeDatosHistoricos(fname, extraCols, colsIndex, colsDate, changeCounters):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
     try:
-        result = leeCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+        result = readCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
     except ValueError as exc:
         raise exc
 
