@@ -1,18 +1,24 @@
 from git import Repo
+
 import pandas as pd
+
 
 class GitIterator(object):
     """
-    Clase para atravesar un repositorio Git (iterador).
-    La razón de crear esto y no el iterador que provee pygit (importado) es que dicho iterador solo funciona hacia el pasado
+    Class to traverse a git repository (iterator).
+
+    Using this and not the iterator provided by pygit because pygit's iterator only work backwards
     """
 
-    def __init__(self, repoPath, reverse=True, minDate=None):
+    def __init__(self, repoPath, reverse=True, minDate=None, strictMinimum=True):
         """
-        Construye un iterador para atravesar un repositorio git, bien hacia el futuro, bien hacia el pasado
-        :param repoPath: Ubicación del repositorio
-        :param reverse: Opcional (def True). True = de ayer hacia hoy. False = De hoy hacia ayer
-        :param minDate: Opcional. Solo carga los commit a partir de cierta fecha hacia el futuro
+        Builds an iterator to traverse a git repository. It traverses either FROM past (reverse=True) or TO
+        past (reverse=False).
+        :param repoPath: Location in disk of git repository
+        :param reverse: Optional (def True). True = FROM past. False = TO past
+        :param minDate: Optional. Just traverses commits from a certain date to future.
+        :param strictMinimum: Optional (def True). True = Commit date is strictly bigger than minDate
+                                                   False = Commit date is bigger or equal than minDate
         """
 
         self.repoPath = repoPath
@@ -21,7 +27,7 @@ class GitIterator(object):
         self.reverse = reverse
         self.currCommit = 0
 
-        self.commitList = [commitID for commitID in self.repo.iter_commits() if self.matchDate(commitID)]
+        self.commitList = [commitID for commitID in self.repo.iter_commits() if self.matchDate(commitID, strictMinimum)]
 
         if reverse:
             self.commitList.reverse()
@@ -39,18 +45,22 @@ class GitIterator(object):
         return commit
 
     def __str__(self):
-        infoSentido = "adelante" if self.reverse else "atras"
-        infoPendientes = "Exhausto." if self.currCommit >= len(
-            self.commitList) else f"Quedan {len(self.commitList) - self.currCommit} entradas."
-        result = f"Git Repo en {self.repoPath}. Hacia {infoSentido} en el tiempo. Estado: {self.currCommit}. {infoPendientes}"
+        infoSentido = "Forwards" if self.reverse else "Backwards"
+        infoPendientes = "Exhausted." if self.currCommit >= len(
+            self.commitList) else f"{len(self.commitList) - self.currCommit} entries remaining"
+        result = f"Git Repo in {self.repoPath}. {infoSentido} in time. State: {self.currCommit}. {infoPendientes}"
 
         return result
 
-    def matchDate(self, commit):
+    def __len__(self):
+        return len(self.commitList) - self.currCommit
+
+    def matchDate(self, commit, strictMinimum=True):
         if self.minDate is None:
             return True
         else:
-            return self.minDate < commit.committed_datetime
+            return (self.minDate < commit.committed_datetime) if strictMinimum else (
+                    self.minDate <= commit.committed_datetime)
 
 
 def fileFromCommit(fPath, commit):

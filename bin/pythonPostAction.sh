@@ -39,7 +39,7 @@ fi
 #En cualquier caso, actualizamos paquetes, si procede
 source ${GTS_VENV}/bin/activate
 pip install -q -U pip wheel
-pip install -U -q -r ${GTS_CODEDIR}/gitTimeSeries/requirements.txt
+pip install -q -U -r ${GTS_CODEDIR}/gitTimeSeries/requirements.txt
 
 export PYTHONPATH=${PYTHONPATH}:${GTS_CODEDIR}/gitTimeSeries
 

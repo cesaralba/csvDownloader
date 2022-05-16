@@ -10,9 +10,9 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from time import time
 
+from utils.GitIterator import fileFromCommit, GitIterator
 from utils.misc import listize
 from utils.pandas import DF2maxValues
-from utils.GitIterator import fileFromCommit, GitIterator
 
 COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
 
@@ -57,9 +57,10 @@ def cambiosDelDiaGrupo(df):
 
 def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs):
     statMsg = dict()
-    resultDF = dfNew
 
     changeCounters = {} if changeCounters is None else changeCounters
+
+    resultCounters = changeCounters2resultDF(data=dfNew.index, changeCounters=changeCounters)
 
     for counterName, counterConf in changeCounters.items():
         # Valores por defecto
@@ -83,23 +84,44 @@ def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs)
         else:
             statMsg[counterName] = resultCuenta
             if indiceCambiadas is not None:
-                resultDF[counterName] = dfOld[counterName] + indiceCambiadas
+                resultCounters[counterName] = indiceCambiadas
 
-    return resultDF, statMsg
+    return resultCounters, statMsg
 
 
-def changeCounters2newColumns(dfNewlines, changeCounters=None):
+def changeCounters2resultColumns(changeCounters=None):
     changeCounters = {} if changeCounters is None else changeCounters
+
+    result = []
 
     for counterName, counterConf in changeCounters.items():
         if isinstance(counterConf, dict):
             if counterConf.get('creaColumna', False):
                 nombreColumna = counterConf.get('nombreColumna', counterName)
-                dfNewlines[nombreColumna] = 0
+                result.append(nombreColumna)
         else:
-            dfNewlines[counterName] = 0
+            result.append(counterName)
 
-    return dfNewlines
+    return result
+
+
+def changeCounters2resultDF(data, changeCounters=None):
+    changeCounters = {} if changeCounters is None else changeCounters
+
+    if isinstance(data, (pd.DataFrame, pd.Series)):
+        auxIndex = data.index
+    elif isinstance(data, (pd.Index, pd.MultiIndex, pd.DatetimeIndex, pd.RangeIndex)):
+        auxIndex = data
+    else:
+        raise TypeError(
+            f"changeCounters2resultDF: don't know how to handle '{type(data)}': expected a DataFrame, a Series or some kind of index")
+
+    result = pd.DataFrame([], index=auxIndex)
+
+    for colname in changeCounters2resultColumns(changeCounters):
+        result[colname] = 0
+
+    return result
 
 
 def changeCounters2ReqColNames(changeCounters: dict = None):
@@ -115,15 +137,13 @@ def changeCounters2ReqColNames(changeCounters: dict = None):
     result = []
     for counterName, counterConf in changeCounters.items():
         if isinstance(counterConf, dict):
-            if counterConf.get('creaColumna', False):
-                nombreColumna = counterConf.get('nombreColumna', counterName)
-                result.append(nombreColumna)
             if 'columnasObj' in counterConf:
                 columnasAmirar = listize(counterConf['columnasObj'])
                 result.extend(columnasAmirar)
         elif isinstance(counterConf, list):
-            result.append(counterName)
             result.extend(counterConf)
+
+    result = result + changeCounters2resultColumns(changeCounters)
 
     return result
 
@@ -168,7 +188,9 @@ def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, 
         counterCols = auxColsObj
 
     NAfiller = DF2maxValues(dfCambiadoOld, counterCols)
-    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[counterCols]).any(axis=1)
+
+    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[
+        counterCols]).any(axis=1)
     return areRowsDifferent
 
 
@@ -206,7 +228,8 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
 
         NAfiller = DF2maxValues(old, targetCols)
 
-        areRowsDifferent = (oldData.fillna(value=NAfiller).loc[shared, targetCols] != new.fillna(value=NAfiller).loc[shared, targetCols]).any(axis=1)
+        areRowsDifferent = (oldData.fillna(value=NAfiller).loc[shared, targetCols] != new.fillna(value=NAfiller).loc[
+            shared, targetCols]).any(axis=1)
         changed = areRowsDifferent.loc[areRowsDifferent].index
     else:
         changed = shared.take([])
@@ -250,15 +273,13 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
     formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
-    fechaUltimaActualizacion = None
 
-    if minDate:
-        fechaUltimaActualizacion = minDate
-    elif DFcurrent is not None:  # Hecha la comprobación de is not None porque pandas se queja
-        fechaUltimaActualizacion = DFcurrent['fechaCommit'].max()
+    maxCommitDateCurrent = DFcurrent['fechaCommit'].max() if DFcurrent is not None else None
+    lastUpdateDate = minDate if minDate else maxCommitDateCurrent
 
-    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
+    repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
 
+    prevDF = None
     for commit in repoIterator:
         timeStart = time()
         commitSHA = commit.hexsha
@@ -273,45 +294,61 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
 
-        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFcurrent)
-        newDF['shaCommit'] = commitSHA
-        newDF['fechaCommit'] = pd.to_datetime(commitDate)
+        # Check if the first DF we are using has already been processed. If so set it as the reference to compare
+        # and take next. We assume there can only be a commit at a certain time
+        if (prevDF is None) and (DFcurrent is not None) and (commitDate == maxCommitDateCurrent):
+            prevDF = newDF
+            continue  # Nothing to do but we have the reference for
+
+        newDFwrk = newDF.copy()
+
+        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, prevDF)
+
+        newDFwrk['shaCommit'] = commitSHA
+        newDFwrk['fechaCommit'] = pd.to_datetime(commitDate)
 
         newData = pd.DataFrame()
-        if len(nuevas):
-            newData = newDF.loc[nuevas, :]
-            newData['contCambios'] = 0
+        if len(cambiadas):
+            dfCurrentChanged = DFcurrent.loc[cambiadas]
+            dfPrevChanged = prevDF.loc[cambiadas]
+            dfNewChanged = newDF.loc[cambiadas]
+            dfNewChangedWrk = newDFwrk.loc[cambiadas]
 
-            newData = changeCounters2newColumns(dfNewlines=newData, changeCounters=changeCounters)
+            dfNewChangedWrk['contCambios'] = dfCurrentChanged['contCambios'] + 1
+
+            restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
+
+            dfCountCambiosCurr, msgStatsCurr = changeCounters2changedDataStats(dfPrevChanged, dfNewChanged,
+                                                                               changeCounters, **restoArgs)
+
+            newConStats = dfCurrentChanged[dfCountCambiosCurr.columns] + dfCountCambiosCurr
+
+            dfChangedData = pd.concat([dfNewChangedWrk, newConStats], axis=1)
+            DFcurrent.loc[cambiadas] = dfChangedData
+            estadCambios.update(msgStatsCurr)
+
+        if len(nuevas):
+            auxNewData = newDFwrk.loc[nuevas, :]
+            auxNewData['contCambios'] = 0
+
+            counterDF = changeCounters2resultDF(data=auxNewData.index, changeCounters=changeCounters)
+            newData = pd.concat([auxNewData, counterDF], axis=1, join='outer')
 
             if DFcurrent is None:
                 DFcurrent = newData
                 timeStop = time()
                 print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
-                                        contParciales="", added=len(nuevas), removed=0))
+                                        contParciales="", added=len(nuevas), removed=len(eliminadas)))
+                prevDF = newDF
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
-        if len(cambiadas):
-            dfCambiadoOld = DFcurrent.loc[cambiadas]
-            dfCambiadoNew = newDF.loc[cambiadas]
-            dfCambiadoNew['contCambios'] = dfCambiadoOld['contCambios'] + 1
-
-            restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
-
-            newConStats, msgStats = changeCounters2changedDataStats(dfCambiadoOld, dfCambiadoNew, changeCounters,
-                                                                    **restoArgs)
-            DFcurrent.loc[cambiadas] = newConStats
-            estadCambios.update(msgStats)
-
-        if len(nuevas):
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
         timeStop = time()
-        strContParciales = ""
-        if changeCounters:
-            strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
+        strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
         print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                 added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
+        prevDF = newDF
 
     return DFcurrent
 
@@ -662,7 +699,7 @@ def indiceDeTipo(dfIndex: pd.MultiIndex, prefijo):
     return result
 
 
-def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
+def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None, **kwargs) -> pd.DataFrame:
     """
     Lee un dataframe (en CSV) y le hace un tratamiento mínimo: fija columnas de índice, elmina columnas y convierte en fecha
     :param fname_or_handle: nombre de fichero o handle para acceder al dataframe
@@ -675,41 +712,21 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
     """
     myDF = pd.read_csv(fname_or_handle, **kwargs)
 
-    errors = []
     columnasDispo = set(myDF.columns)
-    if set(colIndex or set()).difference(columnasDispo):
-        missingCols = set(colIndex).difference(columnasDispo)
-        errorMsg = f"Columnas para Indice. Falta(n) {sorted(missingCols)}"
-        errors.append(errorMsg)
-    if set(cols2drop or set()).difference(columnasDispo):
-        missingCols = set(cols2drop).difference(columnasDispo)
-        errorMsg = f"Columnas para ignorar. Falta(n) {sorted(missingCols)}"
-        errors.append(errorMsg)
-    if colDates2ReqColNames(colDates).difference(columnasDispo):
-        missingCols = colDates2ReqColNames(colDates).difference(columnasDispo)
-        errorMsg = f"Columnas para transformación a tiempo. Falta(n) {sorted(missingCols)}"
-        errors.append(errorMsg)
-    if errors:
-        errorMsg = ', '.join(errors)
-        raise ValueError(f"leeCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
+
+    columnProblems = readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo)
+    if columnProblems:
+        errorMsg = ', '.join(columnProblems)
+        raise ValueError(
+            f"readCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
 
     if colDates:
-        if isinstance(colDates, str):
-            conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
-        elif isinstance(colDates, (list, set)):
-            conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
-                             colDates}
-        elif isinstance(colDates, dict):
-            conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
-                             colDates.items()}
-        else:
-            raise TypeError(
-                f"leeCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+        conversorArgs = readCSV_prepare_date_conversion(colDates, myDF)
 
         for colName, args in conversorArgs.items():
             myDF[colName] = pd.to_datetime(**args)
 
-    resultDropped = myDF.drop(columns=cols2drop) if cols2drop else myDF
+    resultDropped = myDF.drop(columns=(cols2drop or []))
     resultIndex = resultDropped.set_index(colIndex) if colIndex else resultDropped
 
     result = resultIndex
@@ -717,11 +734,43 @@ def leeCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None,
     return result
 
 
+def readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo):
+    errors = []
+    if set(colIndex or set()).difference(columnasDispo):
+        missingCols = set(colIndex).difference(columnasDispo)
+        errorMsg = f"Columns for Index. Missing: {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if set(cols2drop or set()).difference(columnasDispo):
+        missingCols = set(cols2drop).difference(columnasDispo)
+        errorMsg = f"Columns to ignore. Missing: {sorted(missingCols)}"
+        errors.append(errorMsg)
+    if colDates2ReqColNames(colDates).difference(columnasDispo):
+        missingCols = colDates2ReqColNames(colDates).difference(columnasDispo)
+        errorMsg = f"Columns to transform into time. Missing: {sorted(missingCols)}"
+        errors.append(errorMsg)
+    return errors
+
+
+def readCSV_prepare_date_conversion(colDates, myDF):
+    if isinstance(colDates, str):
+        conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
+    elif isinstance(colDates, (list, set)):
+        conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
+                         colDates}
+    elif isinstance(colDates, dict):
+        conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
+                         colDates.items()}
+    else:
+        raise TypeError(
+            f"readCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+    return conversorArgs
+
+
 def leeDatosHistoricos(fname, extraCols, colsIndex, colsDate, changeCounters):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
     try:
-        result = leeCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+        result = readCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
     except ValueError as exc:
         raise exc
 

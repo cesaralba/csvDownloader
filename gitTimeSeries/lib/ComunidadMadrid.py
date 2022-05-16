@@ -1,6 +1,6 @@
 import csv
 
-from lib.miscDataFrames import leeCSVdataset
+from lib.miscDataFrames import readCSVdataset
 from utils.misc import listize
 
 COLDATES = ['fecha_informe']
@@ -25,8 +25,8 @@ def leeDatosMadDF(fname_or_handle, extraIndexes=None, **kwargs):
     colsIndex = COLIDX + (listize(extraIndexes) if extraIndexes else [])
     kwargs.update({'encoding': 'latin-1'})
 
-    myDF = leeCSVdataset(fname_or_handle, colIndex=colsIndex, cols2drop=COLS2DROP, colDates=COLDATES,
-                         decimal=',', dialect='IDA', **kwargs)
+    myDF = readCSVdataset(fname_or_handle, colIndex=colsIndex, cols2drop=COLS2DROP, colDates=COLDATES,
+                          decimal=',', dialect='IDA', **kwargs)
 
     requiredCols = set(colsIndex + COLDATES)
     availableCols = set(myDF.columns.tolist() + myDF.index.names)

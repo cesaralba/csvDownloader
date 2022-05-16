@@ -1,6 +1,6 @@
 import pandas as pd
 
-from .miscDataFrames import estadisticaCategoricals, estadisticaFechaCambios, indexFillNAs, leeCSVdataset
+from .miscDataFrames import estadisticaCategoricals, estadisticaFechaCambios, indexFillNAs, readCSVdataset
 
 DEFAULTCOMMIT = [0]
 
@@ -54,7 +54,7 @@ def leeDatosMomoFila(fname, columna):
 
 
 def leeDatosMomoDF(fname_or_handle, **kwargs):
-    myDF = leeCSVdataset(fname_or_handle, colIndex=COLIDX, cols2drop=COLS2DROP, colDates=['fecha_defuncion'], **kwargs)
+    myDF = readCSVdataset(fname_or_handle, colIndex=COLIDX, cols2drop=COLS2DROP, colDates=['fecha_defuncion'], **kwargs)
     myDF.index = indexFillNAs(myDF.index, replacementValues=INDEXNAREPLACER)
 
     return myDF
