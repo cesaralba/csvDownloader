@@ -285,6 +285,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         commitSHA = commit.hexsha
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
+        fechaRef = None
 
         handle = BytesIO(fileFromCommit(filePath, commit).read())
 
@@ -293,6 +294,9 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         except ValueError as exc:
             print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
+
+        colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
+        maxFecha=newDF.index.to_frame()[colDateRef].max()[0]
 
         # Check if the first DF we are using has already been processed. If so set it as the reference to compare
         # and take next. We assume there can only be a commit at a certain time
@@ -316,7 +320,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
 
             dfNewChangedWrk['contCambios'] = dfCurrentChanged['contCambios'] + 1
 
-            restoArgs = {'columnasObj': None, 'fechaReferencia': commitDate}
+            restoArgs = {'columnasObj': None, 'fechaReferencia': maxFecha}
 
             dfCountCambiosCurr, msgStatsCurr = changeCounters2changedDataStats(dfPrevChanged, dfNewChanged,
                                                                                changeCounters, **restoArgs)
