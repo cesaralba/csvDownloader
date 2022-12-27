@@ -1,7 +1,8 @@
 import pandas as pd
 from configargparse import ArgumentParser
+from sys import exit
 
-from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
+from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, saveHistoricData, leeDatosHistoricos
 from lib.RegistroMomo import COLIDX, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
 
 
@@ -52,6 +53,9 @@ def parse_arguments():
     parser.add('-c', dest='create', action="store_true", env_var='GTS_CREATE', required=False,
                help='Inicializa el fichero si no existe ya', default=False)
 
+    parser.add('--tempFile', dest='tempFile', type=str, required=False, help='Store intermediate results', default=None)
+    parser.add('--tempStep', dest='tempStep', type=int, required=False, help='Store every n commits', default=0)
+
     args = parser.parse_args()
 
     return args
@@ -61,9 +65,9 @@ def main(args):
     momoActual = leeFicheroEntrada(args.infile, args.create) if 'infile' in args and args.infile else None
 
     result = DFVersionado2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMomoDF, DFcurrent=momoActual,
-                                   changeCounters=ESTADSCAMBIO)
+                                   changeCounters=ESTADSCAMBIO,backupFile=args.tempFile,backupStep=args.tempStep)
 
-    grabaDatosHistoricos(result, args.outfile)
+    saveHistoricData(result, args.outfile)
 
 
 if __name__ == '__main__':

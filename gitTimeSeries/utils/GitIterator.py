@@ -70,3 +70,7 @@ def fileFromCommit(fPath, commit):
         if blob.path == fPath:
             fileHandle = blob.data_stream
             return fileHandle
+
+
+def saveTempFileCondition(filename=None, step=0):
+    return (filename is not None) & (step > 0)

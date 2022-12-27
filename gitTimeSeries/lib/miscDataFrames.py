@@ -10,7 +10,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from time import time
 
-from utils.GitIterator import fileFromCommit, GitIterator
+from utils.GitIterator import fileFromCommit, GitIterator, saveTempFileCondition
 from utils.misc import listize
 from utils.pandas import DF2maxValues
 
@@ -249,7 +249,8 @@ def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=
 
 
 def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: pd.DataFrame = None,
-                          minDate: datetime = None, changeCounters: dict = None, **kwargs):
+                          minDate: datetime = None, changeCounters: dict = None, backupFile: str = None,
+                          backupStep: int = 0, **kwargs):
     """
     Atraviesa un repositorio git, leyendo las versiones de un fichero susceptible de ser leído con pandas y hace
     anotaciones de los cambios y las adiciones (cuántos, en qué versión se ha hecho la última modificación).
@@ -278,6 +279,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
     lastUpdateDate = minDate if minDate else maxCommitDateCurrent
 
     repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
+    iterCounter=0
 
     prevDF = None
     for commit in repoIterator:
@@ -296,7 +298,7 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             raise exc
 
         colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
-        maxFecha=newDF.index.to_frame()[colDateRef].max()[0]
+        maxFecha = newDF.index.to_frame()[colDateRef].max()[0]
 
         # Check if the first DF we are using has already been processed. If so set it as the reference to compare
         # and take next. We assume there can only be a commit at a certain time
@@ -344,15 +346,22 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
                 print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                         contParciales="", added=len(nuevas), removed=len(eliminadas)))
                 prevDF = newDF
+                iterCounter+=1
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
+
+            if saveTempFileCondition(filename=backupFile,step=backupStep):
+                if (iterCounter>0) & ((iterCounter%backupStep) == 0):
+                    print(f"Iter: {iterCounter}. Saving temp file {backupFile}. Commit date: {commitDate} Hash: {commitSHA}")
+                    saveHistoricData(DFcurrent,backupFile)
 
         timeStop = time()
         strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
         print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                 added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
         prevDF = newDF
+        iterCounter+=1
 
     return DFcurrent
 
@@ -661,7 +670,7 @@ def filtraFilasSerie(serie, indDict=None, conv2ts=False):
     return result
 
 
-def grabaDatosHistoricos(df, fname):
+def saveHistoricData(df, fname):
     df.to_csv(fname, sep=';', header=True, index=True, quoting=csv.QUOTE_ALL)
 
 
@@ -839,3 +848,4 @@ def reordenaColumnas(df, dfRef):
 
 def ultValorColumna(df):
     return df.apply(lambda x: x[x.last_valid_index()])
+

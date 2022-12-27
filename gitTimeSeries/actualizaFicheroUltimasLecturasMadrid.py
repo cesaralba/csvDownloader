@@ -2,7 +2,7 @@ import pandas as pd
 from configargparse import ArgumentParser
 
 from lib.ComunidadMadrid import COLDATES, COLIDX, ESTADSCAMBIO, leeDatosMadDF
-from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
+from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, saveHistoricData, leeDatosHistoricos
 from utils.misc import listize
 
 
@@ -75,7 +75,7 @@ def main(args):
         print(exc)
         exit(1)
 
-    grabaDatosHistoricos(result, args.outfile)
+    saveHistoricData(result, args.outfile)
 
 
 if __name__ == '__main__':
