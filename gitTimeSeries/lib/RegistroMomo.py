@@ -62,4 +62,4 @@ def leeDatosMomoDF(fname_or_handle, **kwargs):
 
     result = myDF[~myDF['defunciones_observadas'].isna()]
 
-    return result
+    return result.sort_index()

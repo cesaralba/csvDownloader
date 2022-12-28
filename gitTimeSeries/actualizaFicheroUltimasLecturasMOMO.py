@@ -2,16 +2,18 @@ import pandas as pd
 from configargparse import ArgumentParser
 from sys import exit
 
-from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, saveHistoricData, leeDatosHistoricos
+from lib.miscDataFrames import COLSADDEDMERGED, DFversioned2DFmerged, saveHistoricData, readHistoricData
 from lib.RegistroMomo import COLIDX, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
+
+import gc
 
 
 # TODO: Logging como dios manda
 
 def leeFicheroEntrada(fname, create=False):
     try:
-        result = leeDatosHistoricos(fname, extraCols=COLSADDEDMERGED, colsIndex=COLIDX, colsDate=DATECOLS,
-                                    changeCounters=ESTADSCAMBIO)
+        result = readHistoricData(fname, extraCols=COLSADDEDMERGED, colsIndex=COLIDX, colsDate=DATECOLS,
+                                  changeCounters=ESTADSCAMBIO)
     except FileNotFoundError as exc:
         if create:
             return None
@@ -53,8 +55,8 @@ def parse_arguments():
     parser.add('-c', dest='create', action="store_true", env_var='GTS_CREATE', required=False,
                help='Inicializa el fichero si no existe ya', default=False)
 
-    parser.add('--tempFile', dest='tempFile', type=str, required=False, help='Store intermediate results', default=None)
-    parser.add('--tempStep', dest='tempStep', type=int, required=False, help='Store every n commits', default=0)
+    parser.add('--tempFile', dest='tempFile', type=str, env_var='TEMP_FILE', required=False, help='Store intermediate results', default=None)
+    parser.add('--tempStep', dest='tempStep', type=int, env_var='TEMP_STEP', required=False, help='Store every n commits', default=0)
 
     args = parser.parse_args()
 
@@ -62,10 +64,12 @@ def parse_arguments():
 
 
 def main(args):
+    gc.enable()
     momoActual = leeFicheroEntrada(args.infile, args.create) if 'infile' in args and args.infile else None
 
-    result = DFVersionado2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMomoDF, DFcurrent=momoActual,
-                                   changeCounters=ESTADSCAMBIO,backupFile=args.tempFile,backupStep=args.tempStep)
+    result = DFversioned2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMomoDF, DFcurrent=momoActual,
+                                  changeCounters=ESTADSCAMBIO, backupFile=args.tempFile, backupStep=args.tempStep,
+                                  usePrevDF=False)
 
     saveHistoricData(result, args.outfile)
 
