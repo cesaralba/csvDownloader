@@ -2,7 +2,7 @@ import pandas as pd
 from configargparse import ArgumentParser
 
 from lib.ComunidadMadrid import COLDATES, COLIDX, ESTADSCAMBIO, leeDatosMadDF
-from lib.miscDataFrames import COLSADDEDMERGED, DFVersionado2DFmerged, grabaDatosHistoricos, leeDatosHistoricos
+from lib.miscDataFrames import COLSADDEDMERGED, DFversioned2DFmerged, saveHistoricData, readHistoricData
 from utils.misc import listize
 
 
@@ -11,8 +11,8 @@ from utils.misc import listize
 def leeFicheroHistEntrada(fname, colzona, create=False):
     try:
         colsIndex = sorted(set(COLIDX + listize(colzona)))
-        result = leeDatosHistoricos(fname, extraCols=COLSADDEDMERGED, colsIndex=colsIndex, colsDate=COLDATES,
-                                    changeCounters=ESTADSCAMBIO)
+        result = readHistoricData(fname, extraCols=COLSADDEDMERGED, colsIndex=colsIndex, colsDate=COLDATES,
+                                  changeCounters=ESTADSCAMBIO)
 
     except FileNotFoundError as exc:
         if create:
@@ -69,13 +69,13 @@ def main(args):
                                        create=args.create) if 'infile' in args and args.infile else None
 
     try:
-        result = DFVersionado2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMadDF, DFcurrent=momoActual,
-                                       changeCounters=ESTADSCAMBIO, extraIndexes=args.colIndice)
+        result = DFversioned2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMadDF, DFcurrent=momoActual,
+                                      changeCounters=ESTADSCAMBIO, extraIndexes=args.colIndice)
     except ValueError as exc:
         print(exc)
         exit(1)
 
-    grabaDatosHistoricos(result, args.outfile)
+    saveHistoricData(result, args.outfile)
 
 
 if __name__ == '__main__':

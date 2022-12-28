@@ -7,12 +7,15 @@ from types import FunctionType
 
 import numpy as np
 import pandas as pd
+
 from sklearn.preprocessing import StandardScaler
 from time import time
 
-from utils.GitIterator import fileFromCommit, GitIterator
+from utils.GitIterator import fileFromCommit, GitIterator, saveTempFileCondition
 from utils.misc import listize
 from utils.pandas import DF2maxValues
+
+import gc
 
 COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
 
@@ -248,8 +251,9 @@ def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=
     return areRowsDifferent.sum(), areRowsDifferent
 
 
-def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: pd.DataFrame = None,
-                          minDate: datetime = None, changeCounters: dict = None, **kwargs):
+def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: pd.DataFrame = None,
+                         minDate: datetime = None, changeCounters: dict = None, backupFile: str = None,
+                         backupStep: int = 0, usePrevDF: bool = True, **kwargs):
     """
     Atraviesa un repositorio git, leyendo las versiones de un fichero susceptible de ser leído con pandas y hace
     anotaciones de los cambios y las adiciones (cuántos, en qué versión se ha hecho la última modificación).
@@ -272,12 +276,13 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             * Columnas adicionales (metadata del último cambio referido al repo que lo contiene)
             * Contadores de cambios: general y si se han indicado contadores específicos
     """
-    formatoLog = "DFVersionado2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
+    formatoLog = "DFversioned2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
 
     maxCommitDateCurrent = DFcurrent['fechaCommit'].max() if DFcurrent is not None else None
     lastUpdateDate = minDate if minDate else maxCommitDateCurrent
 
     repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
+    iterCounter = 0
 
     prevDF = None
     for commit in repoIterator:
@@ -285,18 +290,17 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
         commitSHA = commit.hexsha
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
-        fechaRef = None
 
         handle = BytesIO(fileFromCommit(filePath, commit).read())
 
         try:
             newDF = readFunction(handle, **kwargs)
         except ValueError as exc:
-            print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
+            print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath} ({commitSHA})")
             raise exc
 
         colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
-        maxFecha=newDF.index.to_frame()[colDateRef].max()[0]
+        maxFecha = newDF.index.to_frame()[colDateRef].max()[0]
 
         # Check if the first DF we are using has already been processed. If so set it as the reference to compare
         # and take next. We assume there can only be a commit at a certain time
@@ -305,16 +309,20 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
             continue  # Nothing to do but we have the reference for
 
         newDFwrk = newDF.copy()
-
-        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, prevDF)
-
         newDFwrk['shaCommit'] = commitSHA
         newDFwrk['fechaCommit'] = pd.to_datetime(commitDate)
 
-        newData = pd.DataFrame()
+        DFref = prevDF if usePrevDF else DFcurrent
+
+        eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFref)
+
+        if len(eliminadas):
+            print(f"Eliminadas {len(eliminadas)}")
+            print(eliminadas.to_frame())
+
         if len(cambiadas):
-            dfCurrentChanged = DFcurrent.loc[cambiadas]
-            dfPrevChanged = prevDF.loc[cambiadas]
+            dfCurrentChanged = DFcurrent.loc[cambiadas].copy()
+            dfPrevChanged = DFref.loc[cambiadas]
             dfNewChanged = newDF.loc[cambiadas]
             dfNewChangedWrk = newDFwrk.loc[cambiadas]
 
@@ -344,15 +352,24 @@ def DFVersionado2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent:
                 print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                         contParciales="", added=len(nuevas), removed=len(eliminadas)))
                 prevDF = newDF
+                iterCounter += 1
                 continue  # No hay cambiadas porque no hay viejas. Son todas nuevas
 
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
+
+            if saveTempFileCondition(filename=backupFile, step=backupStep):
+                if (iterCounter > 0) & ((iterCounter % backupStep) == 0):
+                    print(
+                        f"Iter: {iterCounter}. Saving temp file {backupFile}. Commit date: {commitDate} Hash: {commitSHA}")
+                    saveHistoricData(DFcurrent, backupFile)
 
         timeStop = time()
         strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
         print(formatoLog.format(dur=timeStop - timeStart, commitDate=commitDate, changed=len(cambiadas),
                                 added=len(nuevas), removed=len(eliminadas), contParciales=strContParciales))
         prevDF = newDF
+        iterCounter += 1
+        gc.collect()
 
     return DFcurrent
 
@@ -410,7 +427,7 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
 
     result = dict()
     fname = path.join(repoPath, filePath)
-    formatoLog = "DFVersionado2DFmerged: {fname} {dur:7.3f}s: "
+    formatoLog = "DFversioned2DFmerged: {fname} {dur:7.3f}s: "
     fechaUltimaActualizacion = None
 
     if minDate:
@@ -429,7 +446,7 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
             newDF['shaCommit'] = commitSHA
             newDF['fechaCommit'] = pd.to_datetime(commitDate)
         except ValueError as exc:
-            print(f"DFVersionado2DFmerged: problemas leyendo {repoPath}/{filePath}")
+            print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
 
         result[commitDate] = newDF
@@ -661,7 +678,7 @@ def filtraFilasSerie(serie, indDict=None, conv2ts=False):
     return result
 
 
-def grabaDatosHistoricos(df, fname):
+def saveHistoricData(df, fname):
     df.to_csv(fname, sep=';', header=True, index=True, quoting=csv.QUOTE_ALL)
 
 
@@ -770,7 +787,7 @@ def readCSV_prepare_date_conversion(colDates, myDF):
     return conversorArgs
 
 
-def leeDatosHistoricos(fname, extraCols, colsIndex, colsDate, changeCounters):
+def readHistoricData(fname, extraCols, colsIndex, colsDate, changeCounters):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
     try:
@@ -782,7 +799,7 @@ def leeDatosHistoricos(fname, extraCols, colsIndex, colsDate, changeCounters):
     if missingCols:
         raise ValueError(f"Archivo '{fname}': faltan columnas: {sorted(missingCols)}.")
 
-    return result
+    return result.sort_index()
 
 
 def nombreTipoCamposIndice(dfIndex: pd.MultiIndex) -> pd.Series:
