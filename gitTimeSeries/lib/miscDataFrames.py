@@ -321,7 +321,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFref)
 
         if len(eliminadas):
-            print(f"Eliminadas {len(eliminadas)}")
+            print(f"Removed entries {len(eliminadas)}")
             print(eliminadas.to_frame())
 
         if len(cambiadas):
@@ -758,6 +758,33 @@ def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None
 
     return result
 
+def readCSV_addCommitDateColumn2colsDate(colDates):
+    """
+    Given the existing colDates param, adds 'fechaCommit' in case it doesn't exist
+    :param colDates: current colDates param
+    :return: new version of colDates with 'fechaCommit' added (if required)
+    """
+
+    result = colDates
+
+    if isinstance(colDates, str):
+        if colDates != COMMITDATECOLNAME:
+            result = [colDates, COMMITDATECOLNAME]
+    elif isinstance(colDates, (list, set)):
+        if COMMITDATECOLNAME not in colDates:
+            if isinstance(colDates, (list)):
+                result.append(COMMITDATECOLNAME)
+            else:
+                result.add(COMMITDATECOLNAME)
+    elif isinstance(colDates, dict):
+        if COMMITDATECOLNAME not in colDates:
+            result[COMMITDATECOLNAME] = None
+    else:
+        raise TypeError(
+            f"readCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+
+    return result
+
 
 def readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo):
     errors = []
@@ -794,8 +821,9 @@ def readCSV_prepare_date_conversion(colDates, myDF):
 def readHistoricData(fname, extraCols, colsIndex, colsDate, changeCounters):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
+    auxColsDate = readCSV_addCommitDateColumn2colsDate(colsDate)
     try:
-        result = readCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+        result = readCSVdataset(fname, colIndex=colsIndex, colDates=auxColsDate, sep=';', header=0)
     except ValueError as exc:
         raise exc
 
