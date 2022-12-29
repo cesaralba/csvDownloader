@@ -17,7 +17,11 @@ from utils.pandas import DF2maxValues
 
 import gc
 
-COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
+CHGCOUNTERCOLNAME = 'contCambios'
+COMMITHASHCOLNAME = 'shaCommit'
+COMMITDATECOLNAME = 'fechaCommit'
+
+COLSADDEDMERGED = [COMMITHASHCOLNAME, COMMITDATECOLNAME, CHGCOUNTERCOLNAME]
 
 
 def applyScaler(dfTS, year=2019, scalerCls=StandardScaler):
@@ -278,7 +282,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
     """
     formatoLog = "DFversioned2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
 
-    maxCommitDateCurrent = DFcurrent['fechaCommit'].max() if DFcurrent is not None else None
+    maxCommitDateCurrent = DFcurrent[COMMITDATECOLNAME].max() if DFcurrent is not None else None
     lastUpdateDate = minDate if minDate else maxCommitDateCurrent
 
     repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
@@ -309,8 +313,8 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
             continue  # Nothing to do but we have the reference for
 
         newDFwrk = newDF.copy()
-        newDFwrk['shaCommit'] = commitSHA
-        newDFwrk['fechaCommit'] = pd.to_datetime(commitDate)
+        newDFwrk[COMMITHASHCOLNAME] = commitSHA
+        newDFwrk[COMMITDATECOLNAME] = pd.to_datetime(commitDate,infer_datetime_format=True,utc=True)
 
         DFref = prevDF if usePrevDF else DFcurrent
 
@@ -326,7 +330,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
             dfNewChanged = newDF.loc[cambiadas]
             dfNewChangedWrk = newDFwrk.loc[cambiadas]
 
-            dfNewChangedWrk['contCambios'] = dfCurrentChanged['contCambios'] + 1
+            dfNewChangedWrk[CHGCOUNTERCOLNAME] = dfCurrentChanged[CHGCOUNTERCOLNAME] + 1
 
             restoArgs = {'columnasObj': None, 'fechaReferencia': maxFecha}
 
@@ -341,7 +345,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
 
         if len(nuevas):
             auxNewData = newDFwrk.loc[nuevas, :]
-            auxNewData['contCambios'] = 0
+            auxNewData[CHGCOUNTERCOLNAME] = 0
 
             counterDF = changeCounters2resultDF(data=auxNewData.index, changeCounters=changeCounters)
             newData = pd.concat([auxNewData, counterDF], axis=1, join='outer')
@@ -414,7 +418,7 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
     auxDF = pd.concat(auxDict, sort=True)
     result = auxDF.droplevel(1).sort_index()
 
-    result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name='fechaCommit', freq=reqFreq)
+    result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name=COMMITDATECOLNAME, freq=reqFreq)
 
     timeStop = time()
     print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
@@ -443,8 +447,8 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
 
         try:
             newDF = readFunction(handle, **kwargs)
-            newDF['shaCommit'] = commitSHA
-            newDF['fechaCommit'] = pd.to_datetime(commitDate)
+            newDF[COMMITHASHCOLNAME] = commitSHA
+            newDF[COMMITDATECOLNAME] = pd.to_datetime(commitDate, utc=True)
         except ValueError as exc:
             print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
