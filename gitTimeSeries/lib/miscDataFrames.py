@@ -17,7 +17,11 @@ from utils.pandas import DF2maxValues
 
 import gc
 
-COLSADDEDMERGED = ['shaCommit', 'fechaCommit', 'contCambios']
+CHGCOUNTERCOLNAME = 'contCambios'
+COMMITHASHCOLNAME = 'shaCommit'
+COMMITDATECOLNAME = 'fechaCommit'
+
+COLSADDEDMERGED = [COMMITHASHCOLNAME, COMMITDATECOLNAME, CHGCOUNTERCOLNAME]
 
 
 def applyScaler(dfTS, year=2019, scalerCls=StandardScaler):
@@ -278,7 +282,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
     """
     formatoLog = "DFversioned2DFmerged: {dur:7.3f}s: commitDate: {commitDate} added: {added:6} changed: {changed:6} removed:{removed:6} {contParciales}"
 
-    maxCommitDateCurrent = DFcurrent['fechaCommit'].max() if DFcurrent is not None else None
+    maxCommitDateCurrent = DFcurrent[COMMITDATECOLNAME].max() if DFcurrent is not None else None
     lastUpdateDate = minDate if minDate else maxCommitDateCurrent
 
     repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=lastUpdateDate, strictMinimum=False)
@@ -309,15 +313,15 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
             continue  # Nothing to do but we have the reference for
 
         newDFwrk = newDF.copy()
-        newDFwrk['shaCommit'] = commitSHA
-        newDFwrk['fechaCommit'] = pd.to_datetime(commitDate)
+        newDFwrk[COMMITHASHCOLNAME] = commitSHA
+        newDFwrk[COMMITDATECOLNAME] = pd.to_datetime(commitDate,infer_datetime_format=True,utc=True)
 
         DFref = prevDF if usePrevDF else DFcurrent
 
         eliminadas, cambiadas, nuevas = compareDataFrames(newDF, DFref)
 
         if len(eliminadas):
-            print(f"Eliminadas {len(eliminadas)}")
+            print(f"Removed entries {len(eliminadas)}")
             print(eliminadas.to_frame())
 
         if len(cambiadas):
@@ -326,7 +330,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
             dfNewChanged = newDF.loc[cambiadas]
             dfNewChangedWrk = newDFwrk.loc[cambiadas]
 
-            dfNewChangedWrk['contCambios'] = dfCurrentChanged['contCambios'] + 1
+            dfNewChangedWrk[CHGCOUNTERCOLNAME] = dfCurrentChanged[CHGCOUNTERCOLNAME] + 1
 
             restoArgs = {'columnasObj': None, 'fechaReferencia': maxFecha}
 
@@ -341,7 +345,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
 
         if len(nuevas):
             auxNewData = newDFwrk.loc[nuevas, :]
-            auxNewData['contCambios'] = 0
+            auxNewData[CHGCOUNTERCOLNAME] = 0
 
             counterDF = changeCounters2resultDF(data=auxNewData.index, changeCounters=changeCounters)
             newData = pd.concat([auxNewData, counterDF], axis=1, join='outer')
@@ -414,7 +418,7 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
     auxDF = pd.concat(auxDict, sort=True)
     result = auxDF.droplevel(1).sort_index()
 
-    result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name='fechaCommit', freq=reqFreq)
+    result.index = pd.DatetimeIndex(pd.to_datetime(result.index, utc=True).date, name=COMMITDATECOLNAME, freq=reqFreq)
 
     timeStop = time()
     print(formatoLog.format(dur=timeStop - timeStart, fname=fname))
@@ -443,8 +447,8 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
 
         try:
             newDF = readFunction(handle, **kwargs)
-            newDF['shaCommit'] = commitSHA
-            newDF['fechaCommit'] = pd.to_datetime(commitDate)
+            newDF[COMMITHASHCOLNAME] = commitSHA
+            newDF[COMMITDATECOLNAME] = pd.to_datetime(commitDate, utc=True)
         except ValueError as exc:
             print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath}")
             raise exc
@@ -754,6 +758,33 @@ def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None
 
     return result
 
+def readCSV_addCommitDateColumn2colsDate(colDates):
+    """
+    Given the existing colDates param, adds 'fechaCommit' in case it doesn't exist
+    :param colDates: current colDates param
+    :return: new version of colDates with 'fechaCommit' added (if required)
+    """
+
+    result = colDates
+
+    if isinstance(colDates, str):
+        if colDates != COMMITDATECOLNAME:
+            result = [colDates, COMMITDATECOLNAME]
+    elif isinstance(colDates, (list, set)):
+        if COMMITDATECOLNAME not in colDates:
+            if isinstance(colDates, (list)):
+                result.append(COMMITDATECOLNAME)
+            else:
+                result.add(COMMITDATECOLNAME)
+    elif isinstance(colDates, dict):
+        if COMMITDATECOLNAME not in colDates:
+            result[COMMITDATECOLNAME] = None
+    else:
+        raise TypeError(
+            f"readCSVdataset: there is no way to process argument colDates '{colDates}' of type {type(colDates)}")
+
+    return result
+
 
 def readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo):
     errors = []
@@ -790,8 +821,9 @@ def readCSV_prepare_date_conversion(colDates, myDF):
 def readHistoricData(fname, extraCols, colsIndex, colsDate, changeCounters):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
+    auxColsDate = readCSV_addCommitDateColumn2colsDate(colsDate)
     try:
-        result = readCSVdataset(fname, colIndex=colsIndex, colDates=colsDate, sep=';', header=0)
+        result = readCSVdataset(fname, colIndex=colsIndex, colDates=auxColsDate, sep=';', header=0)
     except ValueError as exc:
         raise exc
 
