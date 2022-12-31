@@ -244,7 +244,7 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
     return removed, changed, added
 
 
-def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None, **kwargs):
+def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
     areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
                                                         columnasObj=columnasObj)
 
@@ -273,6 +273,10 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
     :param changeCounters: (Opcional). Configuración de contadores adicionales de cambios. Espera un diccionario con
                            pares {nombreContador:[lista de columnas a comparar]}. Añade columnas nombreContador al DF
                            resultado.
+    :param backupFile: name of the file storing intermediate result of the iterator on git repo
+    :param backupStep: safe 'backupFile' every 'backupStep' iterations (commits)
+    :param usePrevDF: TRUE: compares newly read dataframe against previously read dataframe; FALSE: compares agains historic data
+
     :param kwargs: (Opcional) Parámetros adicionales a la función de lectura
     :return: Dataframe con el último valor leído para cada valor del índice. Tiene las siguientes características:
             * Índice: mísmo que el devuelto por la función de lectura
@@ -295,13 +299,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
 
-        handle = BytesIO(fileFromCommit(filePath, commit).read())
-
-        try:
-            newDF = readFunction(handle, **kwargs)
-        except ValueError as exc:
-            print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath} ({commitSHA})")
-            raise exc
+        newDF = read_VersionedFile(commit, repoPath, filePath, readFunction, kwargs)
 
         colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
         maxFecha = newDF.index.to_frame()[colDateRef].max()[0]
@@ -310,7 +308,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         # and take next. We assume there can only be a commit at a certain time
         if (prevDF is None) and (DFcurrent is not None) and (commitDate == maxCommitDateCurrent):
             prevDF = newDF
-            continue  # Nothing to do but we have the reference for
+            continue  # Nothing to do, but now we have the reference for next executions
 
         newDFwrk = newDF.copy()
         newDFwrk[COMMITHASHCOLNAME] = commitSHA
@@ -361,11 +359,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
 
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
-            if saveTempFileCondition(filename=backupFile, step=backupStep):
-                if (iterCounter > 0) & ((iterCounter % backupStep) == 0):
-                    print(
-                        f"Iter: {iterCounter}. Saving temp file {backupFile}. Commit date: {commitDate} Hash: {commitSHA}")
-                    saveHistoricData(DFcurrent, backupFile)
+        saveIntermediateResults(DFcurrent, backupFile, backupStep, commitDate, commitSHA, iterCounter)
 
         timeStop = time()
         strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
@@ -376,6 +370,25 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         gc.collect()
 
     return DFcurrent
+
+
+def read_VersionedFile(commitEntry, repoPath, filePath, readFunction, kwargs):
+    commitSHA = commitEntry.hexsha
+    handle = BytesIO(fileFromCommit(filePath, commitEntry).read())
+    try:
+        newDF = readFunction(handle, **kwargs)
+    except ValueError as exc:
+        print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath} ({commitSHA})")
+        raise exc
+    return newDF
+
+
+def saveIntermediateResults(dataframe, filename, eachIter, commitDate, commitSHA, iterCounter):
+    if saveTempFileCondition(filename=filename, step=eachIter):
+        if (iterCounter > 0) & ((iterCounter % eachIter) == 0):
+            print(
+                f"Iter: {iterCounter}. Saving temp file {filename}. Commit date: {commitDate} Hash: {commitSHA}")
+            saveHistoricData(dataframe, filename)
 
 
 def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaObj, minDate: datetime = None, **kwargs):
@@ -463,7 +476,7 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
 
 
 def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, columnasObj=None,
-                            valoresAgrupacion=None, valoresDescribe=None, **kwargs):
+                            valoresAgrupacion=None, valoresDescribe=None):
     areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
                                                         columnasObj=columnasObj)
 
@@ -503,7 +516,7 @@ def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
 
 def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, fechaReferencia,
                             columnasObj=None,
-                            valoresAgrupacion=None, **kwargs):
+                            valoresAgrupacion=None):
     areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
                                                         columnasObj=columnasObj)
 
@@ -536,7 +549,7 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     descFechas = pd.to_datetime(registrosAContar.describe(datetime_is_numeric=True).loc[['min', 'max']]).dt.strftime(
         "%Y-%m-%d")
     descFechas.index = pd.Index(['Fmin', 'Fmax'])
-    descDiff = ((fechaReferencia.date() - registrosAContar.dt.date).dt.days).describe().loc[
+    descDiff = (fechaReferencia.date() - registrosAContar.dt.date).dt.days.describe().loc[
         ['mean', 'std', '50%', 'min', 'max']].map('{:,.2f}'.format)
     descDiff.index = pd.Index(['Dmean', 'Dstd', 'Dmedian', 'Dmin', 'Dmax', ])
 
@@ -583,7 +596,7 @@ def filtraColumnasDF(df, colDict=None, conv2ts=False):
     nomClaves = list(dfColumns.names)
     clave2i = dict(zip(nomClaves, range(numClaves)))
 
-    checkConds = [k < numClaves if isinstance(k, (int)) else (k in nomClaves) for k in colDict.keys()]
+    checkConds = [k < numClaves if isinstance(k, int) else (k in nomClaves) for k in colDict.keys()]
 
     if not all(checkConds):
         failedConds = [cond for cond, check in zip(colDict.items(), checkConds) if not check]
@@ -651,7 +664,7 @@ def filtraFilasSerie(serie, indDict=None, conv2ts=False):
     nomClaves = list(serieIndex.names)
     clave2i = dict(zip(nomClaves, range(numClaves)))
 
-    checkConds = [k < numClaves if isinstance(k, (int)) else (k in nomClaves) for k in indDict.keys()]
+    checkConds = [k < numClaves if isinstance(k, int) else (k in nomClaves) for k in indDict.keys()]
 
     if not all(checkConds):
         failedConds = [cond for cond, check in zip(indDict.items(), checkConds) if not check]
@@ -772,7 +785,7 @@ def readCSV_addCommitDateColumn2colsDate(colDates):
             result = [colDates, COMMITDATECOLNAME]
     elif isinstance(colDates, (list, set)):
         if COMMITDATECOLNAME not in colDates:
-            if isinstance(colDates, (list)):
+            if isinstance(colDates, list):
                 result.append(COMMITDATECOLNAME)
             else:
                 result.add(COMMITDATECOLNAME)
@@ -825,6 +838,7 @@ def readHistoricData(fname, extraCols, colsIndex, colsDate, changeCounters):
     try:
         result = readCSVdataset(fname, colIndex=colsIndex, colDates=auxColsDate, sep=';', header=0)
     except ValueError as exc:
+        print(f"readHistoricData: error reading '{fname}': exc")
         raise exc
 
     missingCols = set(requiredCols).difference(result.columns)
