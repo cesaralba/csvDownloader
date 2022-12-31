@@ -295,13 +295,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
 
-        handle = BytesIO(fileFromCommit(filePath, commit).read())
-
-        try:
-            newDF = readFunction(handle, **kwargs)
-        except ValueError as exc:
-            print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath} ({commitSHA})")
-            raise exc
+        newDF = read_VersionedFile(commit, repoPath, filePath, readFunction, kwargs)
 
         colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
         maxFecha = newDF.index.to_frame()[colDateRef].max()[0]
@@ -361,11 +355,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
 
             DFcurrent = pd.concat([DFcurrent, newData], axis=0)
 
-            if saveTempFileCondition(filename=backupFile, step=backupStep):
-                if (iterCounter > 0) & ((iterCounter % backupStep) == 0):
-                    print(
-                        f"Iter: {iterCounter}. Saving temp file {backupFile}. Commit date: {commitDate} Hash: {commitSHA}")
-                    saveHistoricData(DFcurrent, backupFile)
+        saveIntermediateResults(DFcurrent, backupFile, backupStep, commitDate, commitSHA, iterCounter)
 
         timeStop = time()
         strContParciales = " [" + ",".join([f"{name}={estadCambios[name]:5}" for name in estadCambios]) + "]"
@@ -376,6 +366,25 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         gc.collect()
 
     return DFcurrent
+
+
+def read_VersionedFile(commitEntry, repoPath, filePath, readFunction, kwargs):
+    commitSHA = commitEntry.hexsha
+    handle = BytesIO(fileFromCommit(filePath, commitEntry).read())
+    try:
+        newDF = readFunction(handle, **kwargs)
+    except ValueError as exc:
+        print(f"DFversioned2DFmerged: problemas leyendo {repoPath}/{filePath} ({commitSHA})")
+        raise exc
+    return newDF
+
+
+def saveIntermediateResults(dataframe, filename, eachIter, commitDate, commitSHA, iterCounter):
+    if saveTempFileCondition(filename=filename, step=eachIter):
+        if (iterCounter > 0) & ((iterCounter % eachIter) == 0):
+            print(
+                f"Iter: {iterCounter}. Saving temp file {filename}. Commit date: {commitDate} Hash: {commitSHA}")
+            saveHistoricData(dataframe, filename)
 
 
 def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaObj, minDate: datetime = None, **kwargs):
