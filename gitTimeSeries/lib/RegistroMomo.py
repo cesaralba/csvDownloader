@@ -8,7 +8,7 @@ COLIDX = ['fecha_defuncion', 'ambito', 'nombre_ambito', 'nombre_sexo', 'nombre_g
 COLS2DROP = ['cod_ambito', 'cod_ine_ambito', 'cod_sexo', 'cod_gedad']
 INDEXNAREPLACER = {'nombre_ambito': 'España'}
 
-VALORESAGRUP = {'nacional', 'todos', 'ccaa'}
+VALORESAGRUP = {'nacional', 'todos', 'ccaa','+65'}
 
 ESTADSCAMBIO = {'cambObs': ['defunciones_observadas'],
                 'cambEst': ['defunciones_estimadas_base', 'defunciones_estimadas_base_q01',
