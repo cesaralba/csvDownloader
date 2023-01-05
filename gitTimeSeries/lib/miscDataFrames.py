@@ -476,7 +476,7 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
 
 
 def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, columnasObj=None,
-                            valoresAgrupacion=None, valoresDescribe=None):
+                            valoresAgrupacion=None, valoresDescribe=None, **kwargs):
     areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
                                                         columnasObj=columnasObj)
 
@@ -516,7 +516,7 @@ def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
 
 def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, fechaReferencia,
                             columnasObj=None,
-                            valoresAgrupacion=None):
+                            valoresAgrupacion=None, **kwargs):
     areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
                                                         columnasObj=columnasObj)
 
