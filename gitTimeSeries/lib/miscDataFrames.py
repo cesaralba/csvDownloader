@@ -71,7 +71,7 @@ def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs)
 
     for counterName, counterConf in changeCounters.items():
         # Valores por defecto
-        funcionCuenta = cuentaFilasCambiadas
+        funcionCuenta = countChangedRows
 
         if isinstance(counterConf, list):
             kwargs['columnasObj'] = counterConf
@@ -79,7 +79,7 @@ def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs)
             funcionCuenta = counterConf
         elif isinstance(counterConf, dict):
             kwargs.update(counterConf)
-            funcionCuenta = counterConf.get('funcionCuenta', cuentaFilasCambiadas)
+            funcionCuenta = counterConf.get('funcionCuenta', countChangedRows)
 
         resultCuenta, indiceCambiadas = funcionCuenta(counterName, dfOld, dfNew, **kwargs)
 
@@ -175,28 +175,28 @@ def colDates2ReqColNames(colDates=None):
     return result
 
 
-def columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
-    if len(dfCambiadoOld) != len(dfCambiadoNew):
-        raise ValueError(f"cuentaFilas: longitudes difieren Old:{len(dfCambiadoOld)} != New:{len(dfCambiadoNew)}")
-    if len(dfCambiadoOld) == 0:
+def changedColumnsForStats(counterName, dfChangedOld, dfChangedNew, targetCols=None):
+    if len(dfChangedOld) != len(dfChangedNew):
+        raise ValueError(f"cuentaFilas: longitudes difieren Old:{len(dfChangedOld)} != New:{len(dfChangedNew)}")
+    if len(dfChangedOld) == 0:
         return 0
 
-    auxColsObj = listize(columnasObj)
-    counterCols = dfCambiadoNew.columns.difference(COLSADDEDMERGED)
+    auxColsObj = listize(targetCols)
+    counterCols = dfChangedNew.columns.difference(COLSADDEDMERGED)
 
-    if columnasObj:
-        missingColsNew = set(auxColsObj).difference(dfCambiadoNew.columns)
+    if targetCols:
+        missingColsNew = set(auxColsObj).difference(dfChangedNew.columns)
 
         if missingColsNew:
             print(
-                f"columnasCambiadasParaEstadistica: {counterName}: columnas desconocidas: {sorted(missingColsNew)}. ",
-                f"Columnas existentes: {sorted(list(dfCambiadoOld.columns))}. Ignorando contador.")
+                f"changedColumnsForStats: {counterName}: columnas desconocidas: {sorted(missingColsNew)}. ",
+                f"Columnas existentes: {sorted(list(dfChangedOld.columns))}. Ignorando contador.")
             return None
         counterCols = auxColsObj
 
-    NAfiller = DF2maxValues(dfCambiadoOld, counterCols)
+    NAfiller = DF2maxValues(dfChangedOld, counterCols)
 
-    areRowsDifferent = (dfCambiadoOld.fillna(value=NAfiller)[counterCols] != dfCambiadoNew.fillna(value=NAfiller)[
+    areRowsDifferent = (dfChangedOld.fillna(value=NAfiller)[counterCols] != dfChangedNew.fillna(value=NAfiller)[
         counterCols]).any(axis=1)
     return areRowsDifferent
 
@@ -244,12 +244,12 @@ def compareDataFrames(new: pd.DataFrame, old: pd.DataFrame = None):
     return removed, changed, added
 
 
-def cuentaFilasCambiadas(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None):
-    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
-                                                        columnasObj=columnasObj)
+def countChangedRows(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None, **kwargs):
+    areRowsDifferent = changedColumnsForStats(counterName, dfCambiadoOld, dfCambiadoNew,
+                                              targetCols=columnasObj)
 
     if (areRowsDifferent is None) or areRowsDifferent.empty:
-        print(f"cuentaFilasCambiadas: {counterName}:{columnasObj} EMPTY or None", columnasObj)
+        print(f"countChangedRows: {counterName}:{columnasObj} EMPTY or None", columnasObj)
         return 0, None
 
     return areRowsDifferent.sum(), areRowsDifferent
@@ -312,7 +312,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
 
         newDFwrk = newDF.copy()
         newDFwrk[COMMITHASHCOLNAME] = commitSHA
-        newDFwrk[COMMITDATECOLNAME] = pd.to_datetime(commitDate,infer_datetime_format=True,utc=True)
+        newDFwrk[COMMITDATECOLNAME] = pd.to_datetime(commitDate, infer_datetime_format=True, utc=True)
 
         DFref = prevDF if usePrevDF else DFcurrent
 
@@ -477,11 +477,11 @@ def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: d
 
 def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, columnasObj=None,
                             valoresAgrupacion=None, valoresDescribe=None, **kwargs):
-    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
-                                                        columnasObj=columnasObj)
+    areRowsDifferent = changedColumnsForStats(counterName, dfCambiadoOld, dfCambiadoNew,
+                                              targetCols=columnasObj)
 
     if areRowsDifferent is None:
-        print("estadisticaCategoricals: {counterName}: problemas tras la invocacion a columnasCambiadasParaEstadistica")
+        print("estadisticaCategoricals: {counterName}: problemas tras la invocacion a changedColumnsForStats")
         return {}, None
 
     if (len(areRowsDifferent) == 0) or (areRowsDifferent.sum() == 0):
@@ -517,11 +517,11 @@ def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
 def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, fechaReferencia,
                             columnasObj=None,
                             valoresAgrupacion=None, **kwargs):
-    areRowsDifferent = columnasCambiadasParaEstadistica(counterName, dfCambiadoOld, dfCambiadoNew,
-                                                        columnasObj=columnasObj)
+    areRowsDifferent = changedColumnsForStats(counterName, dfCambiadoOld, dfCambiadoNew,
+                                              targetCols=columnasObj)
 
     if areRowsDifferent is None:
-        print("estadisticaFechaCambios: {counterName}: problemas tras la invocacion a columnasCambiadasParaEstadistica")
+        print("estadisticaFechaCambios: {counterName}: problemas tras la invocacion a changedColumnsForStats")
         return {}, None
 
     if (len(areRowsDifferent) == 0) or (areRowsDifferent.sum() == 0):
@@ -770,6 +770,7 @@ def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None
     result = resultIndex
 
     return result
+
 
 def readCSV_addCommitDateColumn2colsDate(colDates):
     """
