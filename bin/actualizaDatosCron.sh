@@ -1,5 +1,14 @@
 #!/bin/bash
 
+#https://www.putorius.net/lock-files-bash-scripts.html
+LOCKFILE=/var/tmp/actualizaDatosCron.lock
+if { set -C; >${LOCKFILE}; }; then
+       trap "rm -f ${LOCKFILE}" EXIT
+else
+       echo "Lock file '${LOCKFILE} exists… exiting"
+       exit
+fi
+
 ME=$(readlink -e $0)
 MYMD5=$(md5sum $ME | cut -d' ' -f1)
 
