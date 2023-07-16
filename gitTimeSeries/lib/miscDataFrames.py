@@ -312,7 +312,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
 
         newDFwrk = newDF.copy()
         newDFwrk[COMMITHASHCOLNAME] = commitSHA
-        newDFwrk[COMMITDATECOLNAME] = pd.to_datetime(commitDate, infer_datetime_format=True, utc=True)
+        newDFwrk[COMMITDATECOLNAME] = pd.to_datetime(commitDate, utc=True, format='ISO8601')
 
         DFref = prevDF if usePrevDF else DFcurrent
 
@@ -542,14 +542,12 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
         IDXfilter.index = dfCambiadoNew.index
 
     filasAContar = ~IDXfilter & areRowsDifferent
-
     registrosAContar = filasAContar.loc[filasAContar].reset_index()[columnaIndiceObj]
 
     descCateg = registrosAContar.astype('category', copy=False).describe().loc[['unique']]
-    descFechas = pd.to_datetime(registrosAContar.describe(datetime_is_numeric=True).loc[['min', 'max']]).dt.strftime(
-        "%Y-%m-%d")
+    descFechas = pd.to_datetime(registrosAContar.describe().loc[['min', 'max']]).dt.strftime("%Y-%m-%d")
     descFechas.index = pd.Index(['Fmin', 'Fmax'])
-    descDiff = (fechaReferencia.date() - registrosAContar.dt.date).dt.days.describe().loc[
+    descDiff = pd.to_timedelta(fechaReferencia.date() - registrosAContar.dt.date,unit='D').dt.days.describe().loc[
         ['mean', 'std', '50%', 'min', 'max']].map('{:,.2f}'.format)
     descDiff.index = pd.Index(['Dmean', 'Dstd', 'Dmedian', 'Dmin', 'Dmax', ])
 
@@ -821,7 +819,7 @@ def readCSV_prepare_date_conversion(colDates, myDF):
     if isinstance(colDates, str):
         conversorArgs = {colDates: {'arg': myDF[colDates], 'infer_datetime_format': True, 'utc': True}}
     elif isinstance(colDates, (list, set)):
-        conversorArgs = {colName: {'arg': myDF[colName], 'infer_datetime_format': True, 'utc': True} for colName in
+        conversorArgs = {colName: {'arg': myDF[colName], 'format': 'ISO8601', 'utc': True} for colName in
                          colDates}
     elif isinstance(colDates, dict):
         conversorArgs = {colName: {'arg': myDF[colName], 'format': colFormat, 'utc': True} for colName, colFormat in
