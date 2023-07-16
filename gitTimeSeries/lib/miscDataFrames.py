@@ -1,21 +1,19 @@
 import csv
+import gc
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from os import path
+from time import time
 from types import FunctionType
 
 import numpy as np
 import pandas as pd
-
 from sklearn.preprocessing import StandardScaler
-from time import time
 
 from utils.GitIterator import fileFromCommit, GitIterator, saveTempFileCondition
 from utils.misc import listize
 from utils.pandas import DF2maxValues
-
-import gc
 
 CHGCOUNTERCOLNAME = 'contCambios'
 COMMITHASHCOLNAME = 'shaCommit'
@@ -547,7 +545,7 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     descCateg = registrosAContar.astype('category', copy=False).describe().loc[['unique']]
     descFechas = pd.to_datetime(registrosAContar.describe().loc[['min', 'max']]).dt.strftime("%Y-%m-%d")
     descFechas.index = pd.Index(['Fmin', 'Fmax'])
-    descDiff = pd.to_timedelta(fechaReferencia.date() - registrosAContar.dt.date,unit='D').dt.days.describe().loc[
+    descDiff = pd.to_timedelta(fechaReferencia.date() - registrosAContar.dt.date, unit='D').dt.days.describe().loc[
         ['mean', 'std', '50%', 'min', 'max']].map('{:,.2f}'.format)
     descDiff.index = pd.Index(['Dmean', 'Dstd', 'Dmedian', 'Dmin', 'Dmax', ])
 
