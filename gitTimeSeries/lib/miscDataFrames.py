@@ -300,7 +300,7 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         newDF = read_VersionedFile(commit, repoPath, filePath, readFunction, kwargs)
 
         colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
-        maxFecha = newDF.index.to_frame()[colDateRef].max()[0]
+        maxFecha = newDF.index.to_frame()[colDateRef].max().iloc[0]
 
         # Check if the first DF we are using has already been processed. If so set it as the reference to compare
         # and take next. We assume there can only be a commit at a certain time
