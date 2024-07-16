@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #https://www.putorius.net/lock-files-bash-scripts.html
-LOCKFILE=/var/tmp/actualizaDatosCron.lock
+LOCKFILE=/tmp/actualizaDatosCron.lock
 if { set -C; >${LOCKFILE}; }; then
        trap "rm -f ${LOCKFILE}" EXIT
 else
