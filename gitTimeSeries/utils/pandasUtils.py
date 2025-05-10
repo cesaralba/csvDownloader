@@ -1,10 +1,12 @@
-import pandas as pd
 import numpy as np
+
+import pandas as pd
+
 
 def maxDTypeValue(tipo):
     try:
         VALNAN=np.iinfo(tipo).max
-    except ValueError as exc:
+    except ValueError:
         VALNAN=np.finfo(tipo).max
 
     return VALNAN
@@ -16,9 +18,3 @@ def DF2maxValues(df:pd.DataFrame,colList=None):
     result = df[cols2wrk].dtypes.apply( lambda t: maxDTypeValue(t.type))
 
     return result
-
-
-
-
-
-
