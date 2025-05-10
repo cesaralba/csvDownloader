@@ -1,8 +1,8 @@
 ConfigArgParse==1.7
-GitPython==3.1.43
-numpy==2.1.2
+GitPython>=3.1.44
+numpy==2.2.5
 pandas==2.2.3
 python-dateutil==2.9.0.post0
-pytz==2024.2
-scikit-learn==1.5.2
-scipy==1.14.1
+pytz==2025.2
+scikit-learn==1.6.1
+scipy==1.15.3
