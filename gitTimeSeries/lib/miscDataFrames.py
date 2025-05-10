@@ -13,7 +13,7 @@ from sklearn.preprocessing import StandardScaler
 
 from utils.GitIterator import fileFromCommit, GitIterator, saveTempFileCondition
 from utils.misc import listize
-from utils.pandas import DF2maxValues
+from utils.pandasUtils import DF2maxValues
 
 CHGCOUNTERCOLNAME = 'contCambios'
 COMMITHASHCOLNAME = 'shaCommit'
@@ -61,7 +61,7 @@ def cambiosDelDiaGrupo(df):
 
 
 def changeCounters2changedDataStats(dfOld, dfNew, changeCounters=None, **kwargs):
-    statMsg = dict()
+    statMsg = {}
 
     changeCounters = {} if changeCounters is None else changeCounters
 
@@ -119,7 +119,8 @@ def changeCounters2resultDF(data, changeCounters=None):
         auxIndex = data
     else:
         raise TypeError(
-            f"changeCounters2resultDF: don't know how to handle '{type(data)}': expected a DataFrame, a Series or some kind of index")
+            f"changeCounters2resultDF: don't know how to handle '{type(data)}': "
+            f"expected a DataFrame, a Series or some kind of index")
 
     result = pd.DataFrame([], index=auxIndex)
 
@@ -140,7 +141,7 @@ def changeCounters2ReqColNames(changeCounters: dict = None):
         return []
 
     result = []
-    for counterName, counterConf in changeCounters.items():
+    for counterConf in changeCounters.values():
         if isinstance(counterConf, dict):
             if 'columnasObj' in counterConf:
                 columnasAmirar = listize(counterConf['columnasObj'])
@@ -246,6 +247,7 @@ def countChangedRows(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None
     areRowsDifferent = changedColumnsForStats(counterName, dfCambiadoOld, dfCambiadoNew,
                                               targetCols=columnasObj)
 
+    _ = kwargs
     if (areRowsDifferent is None) or areRowsDifferent.empty:
         print(f"countChangedRows: {counterName}:{columnasObj} EMPTY or None", columnasObj)
         return 0, None
@@ -255,7 +257,7 @@ def countChangedRows(counterName, dfCambiadoOld, dfCambiadoNew, columnasObj=None
 
 def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: pd.DataFrame = None,
                          minDate: datetime = None, changeCounters: dict = None, backupFile: str = None,
-                         backupStep: int = 0, usePrevDF: bool = True, **kwargs):
+                         backupStep: int = 0, usePrevDF: bool = True, skipBadCommits: bool = False, **kwargs):
     """
     Atraviesa un repositorio git, leyendo las versiones de un fichero susceptible de ser leído con pandas y hace
     anotaciones de los cambios y las adiciones (cuántos, en qué versión se ha hecho la última modificación).
@@ -297,7 +299,12 @@ def DFversioned2DFmerged(repoPath: str, filePath: str, readFunction, DFcurrent: 
         commitDate = commit.committed_datetime
         estadCambios = defaultdict(int)
 
-        newDF = read_VersionedFile(commit, repoPath, filePath, readFunction, kwargs)
+        try:
+            newDF = read_VersionedFile(commit, repoPath, filePath, readFunction, kwargs)
+        except ValueError as exc:
+            if skipBadCommits:
+                continue
+            raise exc
 
         colDateRef = newDF.index.to_frame().select_dtypes(exclude=['object']).columns.to_list()
         maxFecha = newDF.index.to_frame()[colDateRef].max().iloc[0]
@@ -404,7 +411,7 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
 
     repoIterator = GitIterator(repoPath=repoPath, reverse=True, minDate=fechaUltimaActualizacion)
 
-    auxDict = dict()
+    auxDict = {}
 
     for commit in repoIterator:
         commitSHA = commit.hexsha
@@ -440,7 +447,7 @@ def DFVersionado2TSofTS(repoPath: str, filePath: str, readFunctionFila, columnaO
 def DFVersionado2DictOfTS(repoPath: str, filePath: str, readFunction, minDate: datetime = None, **kwargs):
     timeStart = time()
 
-    result = dict()
+    result = {}
     fname = path.join(repoPath, filePath)
     formatoLog = "DFversioned2DFmerged: {fname} {dur:7.3f}s: "
     fechaUltimaActualizacion = None
@@ -478,6 +485,7 @@ def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     areRowsDifferent = changedColumnsForStats(counterName, dfCambiadoOld, dfCambiadoNew,
                                               targetCols=columnasObj)
 
+    _ = kwargs
     if areRowsDifferent is None:
         print("estadisticaCategoricals: {counterName}: problemas tras la invocacion a changedColumnsForStats")
         return {}, None
@@ -507,14 +515,13 @@ def estadisticaCategoricals(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     if valoresDescribe:
         resultDesc = resultDesc[valoresDescribe]
 
-    result = resultDesc.to_dict()
-
-    return result, None
+    return resultDesc.to_dict(), None
 
 
 def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIndiceObj, fechaReferencia,
                             columnasObj=None,
                             valoresAgrupacion=None, **kwargs):
+    _ = kwargs
     areRowsDifferent = changedColumnsForStats(counterName, dfCambiadoOld, dfCambiadoNew,
                                               targetCols=columnasObj)
 
@@ -546,7 +553,7 @@ def estadisticaFechaCambios(counterName, dfCambiadoOld, dfCambiadoNew, columnaIn
     descFechas = pd.to_datetime(registrosAContar.describe().loc[['min', 'max']]).dt.strftime("%Y-%m-%d")
     descFechas.index = pd.Index(['Fmin', 'Fmax'])
     descDiff = pd.to_timedelta(fechaReferencia.date() - registrosAContar.dt.date, unit='D').dt.days.describe().loc[
-        ['mean', 'std', '50%', 'min', 'max']].map('{:,.2f}'.format)
+        ['mean', 'std', '50%', 'min', 'max']].map(lambda x: f'{x:,.2f}')
     descDiff.index = pd.Index(['Dmean', 'Dstd', 'Dmedian', 'Dmin', 'Dmax', ])
 
     resultDesc = pd.concat([descCateg, descFechas, descDiff])
@@ -584,31 +591,31 @@ def filtraColumnasDF(df, colDict=None, conv2ts=False):
     if not colDict:
         return df
 
-    dfColumns = df.columns
+    esMultiCol = all(isinstance(c, tuple) for c in df.columns.to_list())
 
-    esMultiCol = all([isinstance(c, tuple) for c in dfColumns.to_list()])
+    numClaves = max(len(c) for c in df.columns.to_list()) if esMultiCol else 1
+    clave2i = dict(zip(list(df.columns.names), range(numClaves)))
 
-    numClaves = max([len(c) for c in dfColumns.to_list()]) if esMultiCol else 1
-    nomClaves = list(dfColumns.names)
-    clave2i = dict(zip(nomClaves, range(numClaves)))
-
-    checkConds = [k < numClaves if isinstance(k, int) else (k in nomClaves) for k in colDict.keys()]
+    checkConds = [k < numClaves if isinstance(k, int) else (k in list(df.columns.names)) for k in colDict.keys()]
 
     if not all(checkConds):
         failedConds = [cond for cond, check in zip(colDict.items(), checkConds) if not check]
         print(failedConds)
         condsMsg = ",".join(map(lambda x: '"' + str(x) + '"', failedConds))
-        raise ValueError("filtraColumnasDF: condiciones incorrectas: %s" % condsMsg)
+        raise ValueError(f"filtraColumnasDF: condiciones incorrectas: {condsMsg}")
 
-    funcCheckMulti = lambda x: all([x[k if isinstance(k, int) else clave2i[k]] == v for k, v in colDict.items()])
-    funcCheckSingle = lambda x: (x == list(colDict.values())[0])
+    def funcCheckMulti(x):
+        return all(x[k if isinstance(k, int) else clave2i[k]] == v for k, v in colDict.items())
 
-    colsOk = [c for c in dfColumns.to_list() if (funcCheckMulti if esMultiCol else funcCheckSingle)(c)]
+    def funcCheckSingle(x):
+        return x == list(colDict.values())[0]
+
+    colsOk = [c for c in df.columns.to_list() if (funcCheckMulti if esMultiCol else funcCheckSingle)(c)]
 
     if not colsOk:
         raise KeyError(
-            "filtraColumnasDF: ninguna columna cumple las condiciones (%s). Columnas: %s " % (
-                str(colDict), dfColumns.to_list()))
+            f"filtraColumnasDF: ninguna columna cumple las condiciones ({str(colDict)}). "
+            f"Columnas: {df.columns.to_list()} ")
 
     result = df[colsOk]
     if not conv2ts:  # Don't want conversion, nothing else to do
@@ -652,31 +659,30 @@ def filtraFilasSerie(serie, indDict=None, conv2ts=False):
     if not indDict:
         return serie
 
-    serieIndex = serie.index
+    esMultiInd = all(isinstance(c, tuple) for c in serie.index.to_list())
 
-    esMultiInd = all([isinstance(c, tuple) for c in serieIndex.to_list()])
+    numClaves = max(len(c) for c in serie.index.to_list()) if esMultiInd else 1
+    clave2i = dict(zip(list(serie.index.names), range(numClaves)))
 
-    numClaves = max([len(c) for c in serieIndex.to_list()]) if esMultiInd else 1
-    nomClaves = list(serieIndex.names)
-    clave2i = dict(zip(nomClaves, range(numClaves)))
-
-    checkConds = [k < numClaves if isinstance(k, int) else (k in nomClaves) for k in indDict.keys()]
+    checkConds = [k < numClaves if isinstance(k, int) else (k in list(serie.index.names)) for k in indDict.keys()]
 
     if not all(checkConds):
         failedConds = [cond for cond, check in zip(indDict.items(), checkConds) if not check]
         print(failedConds)
         condsMsg = ",".join(map(lambda x: '"' + str(x) + '"', failedConds))
-        raise ValueError("filtraFilasSerie: condiciones incorrectas: %s" % condsMsg)
+        raise ValueError(f"filtraFilasSerie: condiciones incorrectas: {condsMsg}")
 
-    funcCheckMulti = lambda x: all([x[k if isinstance(k, int) else clave2i[k]] == v for k, v in indDict.items()])
-    funcCheckSingle = lambda x: (x == list(indDict.values())[0])
+    def funcCheckMulti(x):
+        return all(x[k if isinstance(k, int) else clave2i[k]] == v for k, v in indDict.items())
 
-    filassOk = [c for c in serieIndex.to_list() if (funcCheckMulti if esMultiInd else funcCheckSingle)(c)]
+    def funcCheckSingle(x):
+        return (x == list(indDict.values())[0])
+
+    filassOk = [c for c in serie.index.to_list() if (funcCheckMulti if esMultiInd else funcCheckSingle)(c)]
 
     if not filassOk:
-        raise KeyError(
-            "filtraFilasSerie: ninguna fila cumple las condiciones (%s). Filas: %s " % (
-                str(indDict), serieIndex.to_list()))
+        raise KeyError(f"filtraFilasSerie: ninguna fila cumple las condiciones ({str(indDict)}). "
+                       f"Filas: {serie.index.to_list()} ")
 
     result = serie[filassOk]
     if not conv2ts:  # Don't want conversion, nothing else to do
@@ -716,7 +722,7 @@ def indexFillNAs(indexdata: pd.MultiIndex, replacementValues: dict):
 def indiceDeTipo(dfIndex: pd.MultiIndex, prefijo):
     def getMatcher(prefijos):
         def coincideCadena(c: str) -> bool:
-            return any([c.startswith(p) for p in prefijos])
+            return any(c.startswith(p) for p in prefijos)
 
         return coincideCadena
 
@@ -744,15 +750,22 @@ def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None
     :param kwargs: parámetros que se le pasan a pd.read_csv
     :return: dataframe
     """
-    myDF = pd.read_csv(fname_or_handle, **kwargs)
+
+    if 'chunksize' in kwargs and kwargs.get('chunksize'):
+        auxList = []
+        for chunk in pd.read_csv(fname_or_handle, **kwargs):
+            auxList.append(chunk)
+
+        myDF = pd.concat(auxList, axis=0)
+    else:
+        myDF = pd.read_csv(fname_or_handle, **kwargs)
 
     columnasDispo = set(myDF.columns)
 
     columnProblems = readCSV_column_checking(colDates, colIndex, cols2drop, columnasDispo)
     if columnProblems:
-        errorMsg = ', '.join(columnProblems)
         raise ValueError(
-            f"readCSVdataset: ha habido errores: {errorMsg}. Columnas disponibles: {sorted(columnasDispo)}")
+            f"readCSVdataset: ha habido errores: {', '.join(columnProblems)}. Columnas disponibles: {sorted(columnasDispo)}")
 
     if colDates:
         conversorArgs = readCSV_prepare_date_conversion(colDates, myDF)
@@ -763,9 +776,7 @@ def readCSVdataset(fname_or_handle, colIndex=None, cols2drop=None, colDates=None
     resultDropped = myDF.drop(columns=(cols2drop or []))
     resultIndex = resultDropped.set_index(colIndex) if colIndex else resultDropped
 
-    result = resultIndex
-
-    return result
+    return resultIndex
 
 
 def readCSV_addCommitDateColumn2colsDate(colDates):
@@ -828,12 +839,12 @@ def readCSV_prepare_date_conversion(colDates, myDF):
     return conversorArgs
 
 
-def readHistoricData(fname, extraCols, colsIndex, colsDate, changeCounters):
+def readHistoricData(fname, extraCols, colsIndex, colsDate, changeCounters, chunkSize: int = 0):
     requiredCols = extraCols + changeCounters2ReqColNames(changeCounters)
 
     auxColsDate = readCSV_addCommitDateColumn2colsDate(colsDate)
     try:
-        result = readCSVdataset(fname, colIndex=colsIndex, colDates=auxColsDate, sep=';', header=0)
+        result = readCSVdataset(fname, colIndex=colsIndex, colDates=auxColsDate, sep=';', header=0, chunksize=chunkSize)
     except ValueError as exc:
         print(f"readHistoricData: error reading '{fname}': exc")
         raise exc

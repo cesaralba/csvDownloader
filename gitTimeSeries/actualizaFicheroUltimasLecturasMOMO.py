@@ -1,37 +1,38 @@
+import gc
+import sys
+
 import pandas as pd
 from configargparse import ArgumentParser
-from sys import exit
 
-from lib.miscDataFrames import COLSADDEDMERGED, DFversioned2DFmerged, saveHistoricData, readHistoricData
 from lib.RegistroMomo import COLIDX, DATECOLS, ESTADSCAMBIO, leeDatosMomoDF
-
-import gc
+from lib.miscDataFrames import COLSADDEDMERGED, DFversioned2DFmerged, saveHistoricData, readHistoricData
 
 
 # TODO: Logging como dios manda
 
-def leeFicheroEntrada(fname, create=False):
+def leeFicheroEntrada(fname: str, create: bool = False, chunkSize: int = 0):
     try:
         result = readHistoricData(fname, extraCols=COLSADDEDMERGED, colsIndex=COLIDX, colsDate=DATECOLS,
-                                  changeCounters=ESTADSCAMBIO)
-    except FileNotFoundError as exc:
+                                  changeCounters=ESTADSCAMBIO, chunkSize=chunkSize)
+    except FileNotFoundError:
         if create:
             return None
-        else:
-            print(f"Archivo no encontrado '{fname}' y parámetro de creación (-c) no indicado. Adios")
-            exit(1)
+        print(f"Archivo no encontrado '{fname}' y parámetro de creación (-c) no indicado. Adios")
+        sys.exit(1)
     except pd.errors.EmptyDataError as exc:
         print(
-            f"Archivo '{fname}' vacío:{exc}. Borrar y volver a ejecutar programa con parámetro de creación (-c). Adios")
-        exit(1)
+            f"Archivo '{fname}' vacío:{exc}. Borrar y volver a ejecutar programa con parámetro "
+            f"de creación (-c). Adios")
+        sys.exit(1)
     except UnicodeError as exc:
-        print(
-            f"Archivo '{fname}' con problemas:{exc}. Borrar y volver a ejecutar programa con parámetro de creación (-c). Adios")
-        exit(1)
+        print(f"Archivo '{fname}' con problemas:{exc}. Borrar y volver a ejecutar programa "
+              f"con parámetro de creación (-c). Adios")
+        sys.exit(1)
     except ValueError as exc:
         print(
-            f"Archivo '{fname}' con problemas:{exc}. Borrar y volver a ejecutar programa con parámetro de creación (-c). Adios")
-        exit(1)
+            f"Archivo '{fname}' con problemas:{exc}. Borrar y volver a ejecutar programa con parámetro "
+            f"de creación (-c). Adios")
+        sys.exit(1)
 
     return result
 
@@ -54,9 +55,15 @@ def parse_arguments():
 
     parser.add('-c', dest='create', action="store_true", env_var='GTS_CREATE', required=False,
                help='Inicializa el fichero si no existe ya', default=False)
+    parser.add('-x', dest='skipBadCommits', action="store_true", env_var='GTS_SKIPERRORS', required=False,
+               help='Ignora commits incorrectos', default=False)
+    parser.add('-z', dest='chunkSize', action="store", env_var='GTS_CHUNKSIZE', required=False, type=int,
+               help='Number of lines per read', default=None)
 
-    parser.add('--tempFile', dest='tempFile', type=str, env_var='TEMP_FILE', required=False, help='Store intermediate results', default=None)
-    parser.add('--tempStep', dest='tempStep', type=int, env_var='TEMP_STEP', required=False, help='Store every n commits', default=0)
+    parser.add('--tempFile', dest='tempFile', type=str, env_var='TEMP_FILE', required=False,
+               help='Store intermediate results', default=None)
+    parser.add('--tempStep', dest='tempStep', type=int, env_var='TEMP_STEP', required=False,
+               help='Store every n commits', default=0)
 
     args = parser.parse_args()
 
@@ -65,11 +72,12 @@ def parse_arguments():
 
 def main(args):
     gc.enable()
-    momoActual = leeFicheroEntrada(args.infile, args.create) if 'infile' in args and args.infile else None
+    momoActual = leeFicheroEntrada(fname=args.infile, create=args.create,
+                                   chunkSize=args.chunkSize) if 'infile' in args and args.infile else None
 
     result = DFversioned2DFmerged(args.repoPath, args.csvPath, readFunction=leeDatosMomoDF, DFcurrent=momoActual,
                                   changeCounters=ESTADSCAMBIO, backupFile=args.tempFile, backupStep=args.tempStep,
-                                  usePrevDF=False)
+                                  skipBadCommits=args.skipBadCommits, usePrevDF=False, chunksize=args.chunkSize)
 
     saveHistoricData(result, args.outfile)
 
