@@ -1,7 +1,7 @@
-ConfigArgParse==1.7.1
+ConfigArgParse==1.9.0
 GitPython>=3.2.1
 numpy==2.5.4
-pandas==2.3.3
+pandas==3.1.1
 python-dateutil==4.0.0
 scikit-learn==1.9.1
 scipy==1.16.3
