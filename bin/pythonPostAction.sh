@@ -6,6 +6,8 @@ function soLong {
   exit 1
 }
 
+set -euo pipefail
+
 if [ "x$1" != "x" ]
 then
     ENVFILE=$1
@@ -13,6 +15,9 @@ then
 
     source ${ENVFILE}
 fi
+
+PYTHONRUNNER=${PYTHON:-python3}
+PIPOPTIONS=${PIPOPT:-}
 
 [ -n "${GTS_CODEDIR}" ] || soLong "No se ha especificado la variable GTS_CODEDIR"
 [ -n "${GTS_VENV}" ] || soLong "No se ha especificado la variable GTS_VENV"
@@ -33,13 +38,13 @@ then
 else
   #Toca crear el virtualenv para ejecutar el python
   [ -d ${GTS_VENV} ] || rm -rf  ${GTS_VENV} || soLong "Problemas eliminando ${GTS_VENV}. Bye"
-  python3 -mvenv --clear ${GTS_VENV}
+  ${PYTHONRUNNER} -mvenv --clear ${GTS_VENV}
 fi
 
 #En cualquier caso, actualizamos paquetes, si procede
 source ${GTS_VENV}/bin/activate
-pip install -q -U pip wheel
-pip install -q -U -r ${GTS_CODEDIR}/gitTimeSeries/requirements.txt
+pip install ${PIPOPTIONS} -q -U pip wheel
+pip install ${PIPOPTIONS} -q -U -r ${GTS_CODEDIR}/gitTimeSeries/requirements.txt
 
 export PYTHONPATH=${PYTHONPATH}:${GTS_CODEDIR}/gitTimeSeries
 
