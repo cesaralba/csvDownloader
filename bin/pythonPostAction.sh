@@ -46,7 +46,7 @@ source ${GTS_VENV}/bin/activate
 pip install ${PIPOPTIONS} -q -U pip wheel
 pip install ${PIPOPTIONS} -q -U -r ${GTS_CODEDIR}/gitTimeSeries/requirements.txt
 
-export PYTHONPATH=${PYTHONPATH}:${GTS_CODEDIR}/gitTimeSeries
+export PYTHONPATH=${PYTHONPATH:-}:${GTS_CODEDIR}/gitTimeSeries
 
 
 DATAFILEENREPO="${DATAFILE##${DATADIR}/}"
